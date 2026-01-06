@@ -21,9 +21,9 @@ Create a new folder inside the Homework 2 directory in the forked repository. Th
 In this assignment, you can choose one of the following datasets:
 
 * [Olympic Games Paris 2024](https://www.kaggle.com/datasets/piterfm/paris-2024-olympic-summer-games/data)
-* [Airline Delay Causes](https://www.kaggle.com/datasets/abdelazizel7or/airline-delay-cause)
-* [Uber Ride Analytics](https://www.kaggle.com/datasets/yashdevladdha/uber-ride-analytics-dashboard?select=ncr_ride_bookings.csv)
-* [Airbnb in New York](https://www.kaggle.com/datasets/arianazmoudeh/airbnbopendata)
+* [Global Population Stress Index](https://www.kaggle.com/datasets/sarcasmos/global-population-pressure-index/data)
+* [Spotify Global Music 2009-2025](https://www.kaggle.com/datasets/wardabilal/spotify-global-music-dataset-20092025)
+* [Book Popularity for Exchanging](https://www.kaggle.com/datasets/sergiykovalchuck/the-most-popular-books-for-exchanging)
   
 To use a dataset, download the data file from the respective URL above and put it in the `./<your-template>/data` folder.
 

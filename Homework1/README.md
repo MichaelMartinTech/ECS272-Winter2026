@@ -24,7 +24,6 @@ Note that we will be using Observable Notebook in workshops.
 Each of the following datasets can be downloaded as CSV files.
 
 * [World Top Restaurants](https://www.kaggle.com/datasets/shaistashahid/world-top-resturants)
-* [Book Popularity for Exchanging](https://www.kaggle.com/datasets/sergiykovalchuck/the-most-popular-books-for-exchanging)
 * [TV Show Ratings](https://www.kaggle.com/datasets/raveennimbiwal/top-rated-tv-shows-dataset-global-2025)
 * [Future Jobs and Skills Demand](https://www.kaggle.com/datasets/ahsanneural/future-jobs-and-skills-demand-2025)
 * [Global Disaster Response](https://www.kaggle.com/datasets/zubairdhuddi/global-daset)
