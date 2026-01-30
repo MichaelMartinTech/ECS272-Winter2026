@@ -4,6 +4,22 @@ html, body, #root {
 	margin: 0;
 }
 
+.dashboard-title {
+	text-align: center;
+	margin: 8px 0 6px 0;
+	font-size: 20px;
+	font-weight: 600;
+	line-height: 1.25;
+}
+
+.dashboard-title-sub {
+	display: block;
+	font-size: 14px;
+	font-weight: 400;
+	color: #555;
+	margin-top: 4px;
+}
+
 .page {
 	height: 100%;
 	display: flex;

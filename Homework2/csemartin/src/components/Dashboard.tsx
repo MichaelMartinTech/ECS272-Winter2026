@@ -66,9 +66,39 @@ export default function Dashboard() {
 
 	return (
 		<div className="page">
-			<div className="dashboard-subtitle">
-				Overview → temporal genre shifts (top), artist vs track popularity relationships (bottom-left), and baseline popularity differences by genre (bottom-right)
+		<h2 className="dashboard-title">
+			Genre, Popularity, and Temporal Structure in Contemporary Music
+			<span className="dashboard-title-sub">
+				How Genre and Artist Visibility Shape Track Popularity Over Time
+			</span>
+		</h2>
+
+		<div className="dashboard-subtitle">
+			<div className="figure-guide">
+				<strong>Figure guide.</strong>
+				<span>
+					<strong>(Top)</strong> Stream graph — year-by-year genre composition.
+					<em> Area thickness</em> encodes relative genre prevalence within each year (wiggle-offset for readability).
+				</span>
+				<span>
+					<br></br>
+					<strong>(Bottom-left)</strong> Scatter + trend lines — association between artist popularity and track popularity.
+					<em> Point size</em> = artist followers; <em>color</em> = genre; <em>lines</em> = per-genre least-squares fit.
+				</span>
+				<span>
+					<br></br>
+					<strong>(Bottom-right)</strong> Bar chart — baseline track popularity by genre.
+					<em> Bar height</em> = mean popularity; <em>error bar (variability)</em> = ±1 standard deviation.
+				</span>
 			</div>
+
+			<div className="figure-goal">
+				<br></br>
+				<strong>Objective:</strong> Does genre context and artist popularity jointly structure track popularity,
+				and whether genres differ in baseline popularity and variability.
+			</div>
+		</div>
+
 
 			<div className="dashboard">
 				<div className="top-row">
