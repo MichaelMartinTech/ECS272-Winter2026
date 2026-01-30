@@ -1,0 +1,58 @@
+/* dashboard.css */
+html, body, #root {
+	height: 100%;
+	margin: 0;
+}
+
+.page {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+.dashboard-subtitle {
+	font-size: 12px;
+	color: #444;
+	padding: 6px 12px;
+	text-align: center;
+}
+
+.dashboard {
+	display: grid;
+	grid-template-rows: 45% 55%;
+	height: 100vh;
+	gap: 8px;
+	padding: 8px;
+	box-sizing: border-box;
+}
+
+.top-row {
+	display: flex;
+	gap: 8px;
+}
+
+.bottom-row {
+	display: flex;
+	gap: 8px;
+}
+
+.panel {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid #ccc;
+	padding: 6px;
+	box-sizing: border-box;
+	overflow: hidden;
+}
+
+.panel h3 {
+	margin: 4px 0 6px 0;
+	font-size: 14px;
+	text-align: center;
+}
+
+svg {
+	width: 100%;
+	height: 100%;
+}
