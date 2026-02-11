@@ -1,3 +1,5 @@
+// Changes to make: color 'fill' in gap areas when untoggling genres
+
 import { useEffect } from "react";
 import * as d3 from "d3";
 import { GENRES, genreColorScale } from "../../colors";
@@ -30,15 +32,49 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 				.append("g")
 				.attr("transform", `translate(${margin.left},${margin.top})`);
 
+			// Decide tick format based on actual tick values
+			const adaptiveTickFormat = (scale: d3.ScaleLinear<number, number>) => {
+				const ticks = scale.ticks(8);
+
+				const hasDecimal = ticks.some(t => Math.abs(t - Math.round(t)) > 1e-6);
+
+				if (!hasDecimal) {
+					return d3.format("d");
+				}
+
+				return (d: number) => {
+					return Math.abs(d - Math.round(d)) < 1e-6
+						? d3.format("d")(d)
+						: d3.format(".2f")(d);
+				};
+			};
+
 			// Clip path to prevent layers from drawing outside plot bounds
-			svg.append("defs")
-				.append("clipPath")
-				.attr("id", "stream-clip")
-				.append("rect")
-				.attr("x", 0)
-				.attr("y", 0)
-				.attr("width", width)
-				.attr("height", height);
+			const defs = svg.append("defs");
+
+			// clip
+			defs.append("clipPath")
+			.attr("id", "stream-clip")
+			.append("rect")
+			.attr("width", width)
+			.attr("height", height);
+
+			// stripes
+			/*
+			defs.append("pattern")
+			.attr("id", "hover-stripes")
+			.attr("patternUnits", "userSpaceOnUse")
+			.attr("width", 6)
+			.attr("height", 6)
+			.attr("patternTransform", "rotate(45)")
+			.append("line")
+			.attr("x1", 0)
+			.attr("y1", 0)
+			.attr("x2", 0)
+			.attr("y2", 6)
+			.attr("stroke", "rgba(255,255,255,0.6)")
+			.attr("stroke-width", 1);
+			*/
 
 			// Filter data to valid years observed in dataset
 			const filtered = data.filter(d =>
@@ -139,77 +175,148 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 				.attr("fill", d => genreColorScale(d.key))
 				.attr("opacity", 0.9);
 
+			const hoverLayer = layerGroup.selectAll(".hover-layer")
+				.data(layers)
+				.enter()
+				.append("path")
+				.attr("class", "hover-layer")
+				.attr("d", area)
+				.attr("fill", "url(#hover-stripes)")
+				.attr("opacity", 0)
+				.style("pointer-events", "none"); // important
+
+			// Track genre visibility (true = emphasized)
+			const genreVisibility = new Map<string, boolean>();
+
+			// Magnitude rescaling toggle (true = dynamic Y-scale)
+			let magnitudeScalingEnabled = true;
+
+			GENRES.forEach(g => genreVisibility.set(g, true));
+
 			// Zoom + pan interaction (horizontal only)
 			// Zooming recomputes Y-scale based on visible temporal window
-			let rafId = 0;
 
+			// Idea: Add a small button that shows UI for changing visualization (Accessibility) - Maybe a TOGGLE for magnitude rescaling on/off (Y-axis domain fixed to global vs dynamic based on visible window)
+			// Also: Add toggle to hide things for magnitude view, it'll really help show differences better.
+			let rafId = 0;
+			let currentTransform = d3.zoomIdentity;
+
+			const updateLegendVisuals = () => {
+			legend.selectAll("g").each(function(_, i) {
+				const genre = GENRES[i];
+				const active = genreVisibility.get(genre);
+
+				d3.select(this).select("rect")
+				.transition()
+				.duration(150)
+				.attr("opacity", active ? 1 : 0.25);
+
+				d3.select(this).select("text")
+				.transition()
+				.duration(150)
+				.attr("opacity", active ? 1 : 0.35)
+				.attr("font-weight", "normal");
+
+			});
+			};
+
+			// Recompute Y-scale + redraw using current visibility + zoom state
+			const updateYScaleAndRedraw = (
+				zx: d3.ScaleLinear<number, number>,
+				x0: number,
+				x1: number
+			) => {
+
+				paths
+					/*
+					.attr("fill", d =>
+						genreVisibility.get(d.key)
+						? genreColorScale(d.key)
+						: genreColorScale(d.key)
+					)
+					*/
+				//.attr("stroke", d => genreVisibility.get(d.key) ? "url(#diagonal-stripes)" : "none")
+				//.attr("stroke-width", d => genreVisibility.get(d.key) ? 2 : 0);
+
+
+				// Update visual styling first (single source of truth for visibility) 
+				// ...before recomputing Y-domain to reflect changes immediately
+				const visiblePoints = layers.flatMap(layer => {
+					if (!genreVisibility.get(layer.key)) return [];
+					return layer.filter(d =>
+						d.data.year >= x0 && d.data.year <= x1
+					);
+				});
+
+				if (visiblePoints.length === 0) return;
+
+				const vMin = d3.min(visiblePoints, d => d[0])!;
+				const vMax = d3.max(visiblePoints, d => d[1])!;
+
+				// Y-Domain logic
+				if (magnitudeScalingEnabled) {
+					y.domain([Math.floor(vMin), Math.ceil(vMax)]).nice();
+				} else {
+					y.domain([yMin, yMax]).nice(); // restore global scale
+				}
+
+				const ySpan = Math.abs(vMax - vMin);
+				const yTickFormat = adaptiveTickFormat(y);
+				const yTicks = ySpan < 10 ? 6 : ySpan < 50 ? 7 : 8;
+
+				yAxis.transition()
+					.duration(200)
+					.ease(d3.easeCubicOut)
+					.call(
+						d3.axisLeft(y)
+							.ticks(yTicks)
+							.tickFormat(yTickFormat as any)
+					);
+
+				paths.transition()
+				.duration(200)
+				.ease(d3.easeCubicOut)
+				.attr("opacity", d => genreVisibility.get(d.key) ? 0.9 : 0.1)
+				.attr("d", d3.area<any>()
+					.x(d => zx(d.data.year))
+					.y0(d => y(d[0]))
+					.y1(d => y(d[1]))
+					.curve(d3.curveCatmullRom)
+				);
+
+			};
+
+			// D3's built-in zoom behavior with custom constraints and event handling
 			const zoom = d3.zoom<SVGSVGElement, unknown>()
 				.scaleExtent([1, 8])
 				.translateExtent([[0, 0], [width, height]])
 				.extent([[0, 0], [width, height]])
 				.on("zoom", (event) => {
+					currentTransform = event.transform;
 					if (rafId) cancelAnimationFrame(rafId);
 
 					rafId = requestAnimationFrame(() => {
 						rafId = 0;
 
 						const zx = event.transform.rescaleX(x);
-
-						// Update x-axis
 						xAxis.call(
 							d3.axisBottom(zx)
 								.ticks(10)
 								.tickFormat(d3.format("d"))
 						);
 
-						// Determine visible year range
 						const [x0, x1] = zx.domain();
-
-						// Update visible year labels
 						minYearLabel
 							.attr("x", zx(x0) + 6)
 							.text(Math.round(x0));
-
 						maxYearLabel
 							.attr("x", zx(x1) - 6)
 							.text(Math.round(x1));
 
-						// Compute Y-domain from ORIGINAL stacked layers (no restacking)
-						const visiblePoints = layers.flatMap(layer =>
-							layer.filter(d =>
-								d.data.year >= x0 && d.data.year <= x1
-							)
-						);
-
-						if (visiblePoints.length === 0) return;
-
-						const vMin = d3.min(visiblePoints, d => d[0])!;
-						const vMax = d3.max(visiblePoints, d => d[1])!;
-
-						y.domain([Math.floor(vMin), Math.ceil(vMax)]).nice();
-
-						// Smooth y-axis update
-						yAxis.transition()
-							.duration(120)
-							.ease(d3.easeLinear)
-							.call(
-								d3.axisLeft(y)
-									.ticks(8)
-									.tickFormat(d3.format("d"))
-							);
-
-						// Smooth stream update
-						paths.transition()
-							.duration(120)
-							.ease(d3.easeLinear)
-							.attr("d", d3.area<any>()
-								.x(d => zx(d.data.year))
-								.y0(d => y(d[0]))
-								.y1(d => y(d[1]))
-								.curve(d3.curveCatmullRom)
-							);
+						updateYScaleAndRedraw(zx, x0, x1);
 					});
 				});
+
 			/*
 			// Explicit start / end year labels anchored inside plot bounds
 			const startYear = years[0];
@@ -245,6 +352,7 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 
 			// Initialize visible year labels on first render
 			const [x0Init, x1Init] = x.domain();
+			
 
 			minYearLabel
 				.attr("x", x(x0Init) + 6)
@@ -260,7 +368,45 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 
 			GENRES.forEach((genre, i) => {
 				const row = legend.append("g")
-					.attr("transform", `translate(0, ${i * 16})`);
+				.attr("transform", `translate(0, ${i * 16})`)
+				.style("cursor", "pointer")
+
+				.on("mouseenter", function () {
+					// bold text
+					d3.select(this).select("text")
+					.attr("font-weight", "bold");
+
+					// dim other streams
+					paths
+					.transition()
+					.duration(120)
+					.attr("opacity", d => d.key === genre ? 1 : 0.4);
+				})
+
+				.on("mouseleave", function () {
+					// unbold text
+					d3.select(this).select("text")
+					.attr("font-weight", "normal");
+
+					// restore stream opacity
+					paths
+					.transition()
+					.duration(120)
+					.attr("opacity", d =>
+						genreVisibility.get(d.key) ? 0.9 : 0.1
+					);
+				})
+
+				.on("click", () => {
+					const current = genreVisibility.get(genre)!;
+					genreVisibility.set(genre, !current);
+
+					const zx = currentTransform.rescaleX(x);
+					const [x0, x1] = zx.domain();
+					updateYScaleAndRedraw(zx, x0, x1);
+					updateLegendVisuals();
+				});
+
 
 				row.append("rect")
 					.attr("width", 10)
@@ -272,6 +418,45 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 					.attr("y", 9)
 					.attr("font-size", "10px")
 					.text(genre);
+
+				
+			});
+
+			// Initial Y-scale sync (important for toggle correctness) after legend exists
+			updateYScaleAndRedraw(x, x0Init, x1Init);
+			updateLegendVisuals();
+
+			// Magnitude scale toggle button
+			const toggleGroup = g.append("g")
+				.attr("transform", `translate(${width - 120}, ${height + 24})`)
+				.style("cursor", "pointer");
+
+			const toggleRect = toggleGroup.append("rect")
+				.attr("width", 110)
+				.attr("height", 18)
+				.attr("rx", 4)
+				.attr("fill", "#eaeaea")
+				.attr("stroke", "#aaa");
+
+			const toggleText = toggleGroup.append("text")
+				.attr("x", 8)
+				.attr("y", 13)
+				.attr("font-size", "10px")
+				.text("Magnitude scaling: ON");
+
+			toggleGroup.on("click", () => {
+				magnitudeScalingEnabled = !magnitudeScalingEnabled;
+
+				toggleText.text(
+					`Magnitude scaling: ${magnitudeScalingEnabled ? "ON" : "OFF"}`
+				);
+
+				// Force immediate recompute using current zoom state
+				const zx = currentTransform.rescaleX(x);
+				const [x0, x1] = zx.domain();
+
+				updateYScaleAndRedraw(zx, x0, x1);
+				updateLegendVisuals();
 			});
 
 			// Explanatory annotation
