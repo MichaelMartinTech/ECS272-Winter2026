@@ -10,7 +10,13 @@ type YearGenreRow = {
 	[key: string]: number;
 };
 
-export default function StreamGraph({ data }: { data: Track[] }) {
+export default function StreamGraph({
+	data,
+	onVisibleRangeChange
+}: {
+	data: Track[];
+	onVisibleRangeChange?: (range: [number, number]) => void;
+}) {
 	useEffect(() => { // Check if data is available
 		if (!data) return;
 
@@ -306,6 +312,11 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 						);
 
 						const [x0, x1] = zx.domain();
+						onVisibleRangeChange?.([
+							Math.round(x0),
+							Math.round(x1)
+						]);
+
 						minYearLabel
 							.attr("x", zx(x0) + 6)
 							.text(Math.round(x0));
@@ -442,13 +453,13 @@ export default function StreamGraph({ data }: { data: Track[] }) {
 				.attr("x", 8)
 				.attr("y", 13)
 				.attr("font-size", "10px")
-				.text("Magnitude scaling: ON");
+				.text("Auto-scale Y: ON");
 
 			toggleGroup.on("click", () => {
 				magnitudeScalingEnabled = !magnitudeScalingEnabled;
 
 				toggleText.text(
-					`Magnitude scaling: ${magnitudeScalingEnabled ? "ON" : "OFF"}`
+					`Auto-scale Y: ${magnitudeScalingEnabled ? "ON" : "OFF"}`
 				);
 
 				// Force immediate recompute using current zoom state

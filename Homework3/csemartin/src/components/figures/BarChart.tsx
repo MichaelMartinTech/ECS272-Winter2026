@@ -10,9 +10,27 @@ type GenreStat = {
 	sd: number;
 };
 
-export default function BarChart({ data }: { data: Track[] }) {
+export default function BarChart({
+	data,
+	visibleYearRange,
+	linkEnabled
+}: {
+	data: Track[];
+	visibleYearRange: [number, number] | null;
+	linkEnabled: boolean;
+}) {
+
 	useEffect(() => { // Check if data is available
 		if (!data || data.length === 0) return;
+
+		// Apply streamgraph-linked filtering (HW3 coordination)
+		const filteredData =
+			linkEnabled && visibleYearRange
+				? data.filter(d =>
+					d.release_year >= visibleYearRange[0] &&
+					d.release_year <= visibleYearRange[1]
+				)
+				: data;
 
 		const svg = d3.select("#bar-svg");
 
@@ -34,15 +52,18 @@ export default function BarChart({ data }: { data: Track[] }) {
 
 			// Aggregate mean and standard deviation per genre
 			const stats: GenreStat[] = GENRES.map(genre => {
-				const values = data
+				const values = filteredData
 					.filter(d => d.genre === genre)
 					.map(d => d.track_popularity)
 					.filter(v => Number.isFinite(v));
 
 				return {
 					genre,
-					mean: d3.mean(values)!,
-					sd: d3.deviation(values) || 0
+					//mean: d3.mean(values)!,
+					mean: values.length ? d3.mean(values)! : 0,
+					sd: values.length ? d3.deviation(values) || 0 : 0
+					// --
+					//sd: d3.deviation(values) || 0
 				};
 			});
 
@@ -172,7 +193,7 @@ export default function BarChart({ data }: { data: Track[] }) {
 			window.removeEventListener("resize", onResize);
 		};
 
-	}, [data]);
+	}, [data, visibleYearRange, linkEnabled]);
 
 	return <svg id="bar-svg" />;
 }

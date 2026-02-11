@@ -39,6 +39,13 @@ function normalizeGenre(raw: string): string {
 export default function Dashboard() {
 	const [data, setData] = useState<Track[] | null>(null);
 
+	// Shared interaction state (HW3 coordinated filtering)
+	const [visibleYearRange, setVisibleYearRange] =
+		useState<[number, number] | null>(null);
+
+	const [linkBarToStream, setLinkBarToStream] =
+		useState<boolean>(true);
+
 	// Load data ONCE
 	useEffect(() => {
 		d3.csv("/data/track_data_final.csv").then(raw => {
@@ -105,7 +112,10 @@ export default function Dashboard() {
 					<div className="panel">
 						<h3>Stream Graph: Genre Composition Over Time</h3>
 						{/* Temporal aggregate view showing relative genre prevalence over release years */}
-						<StreamGraph data={data} />
+						<StreamGraph
+							data={data}
+							onVisibleRangeChange={setVisibleYearRange}
+						/>
 					</div>
 				</div>
 
@@ -118,9 +128,29 @@ export default function Dashboard() {
 					</div>
 
 					<div className="panel">
-						<h3>Mean Track Popularity by Genre</h3>
+						<h3>
+							{linkBarToStream && visibleYearRange
+								? `Mean Track Popularity by Genre (${visibleYearRange[0]}–${visibleYearRange[1]})`
+								: "Mean Track Popularity by Genre (All Years)"}
+						</h3>
+
+						<div style={{ textAlign: "center", fontSize: "11px", marginBottom: "4px" }}>
+							<label>
+								<input
+									type="checkbox"
+									checked={linkBarToStream}
+									onChange={e => setLinkBarToStream(e.target.checked)}
+									style={{ marginRight: "4px" }}
+								/>
+								Link to Streamgraph Zoom
+							</label>
+						</div>
 						{/* baseline differences in track popularity across genres, providing context for the genre */}
-						<BarChart data={data} />
+						<BarChart
+							data={data}
+							visibleYearRange={visibleYearRange}
+							linkEnabled={linkBarToStream}
+						/>
 					</div>
 				</div>
 			</div>

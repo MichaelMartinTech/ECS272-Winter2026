@@ -27,11 +27,13 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 	// SCATTER PLOT + TRENDLINES
 	useEffect(() => {
 		if (!data) return;
-
 		const svg = d3.select("#scatter-svg");
 
 		const draw = () => {
+			const autoYScaling = true; // toggle magnitude for UI
+
 			svg.selectAll("*").remove();
+			let currentTransform = d3.zoomIdentity;
 
 			const margin = { top: 30, right: 140, bottom: 50, left: 60 };
 			const svgNode = svg.node() as SVGSVGElement;
@@ -41,9 +43,21 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 
 			if (width <= 0 || height <= 0) return;
 
+			const defs = svg.append("defs");
+
+			defs.append("clipPath")
+				.attr("id", "scatter-clip")
+				.append("rect")
+				.attr("width", width)
+				.attr("height", height);
+
 			const g = svg
 				.append("g")
 				.attr("transform", `translate(${margin.left},${margin.top})`);
+
+			// Plot layer (clipped to axes bounds)
+			const plotLayer = g.append("g")
+				.attr("clip-path", "url(#scatter-clip)");
 
 			// Scales
 			const x = d3.scaleLinear().domain([0, 100]).range([0, width]);
@@ -64,11 +78,78 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 				.range([1.0, 4.0]);
 
 			// Axes
+			/*
 			g.append("g")
 				.attr("transform", `translate(0,${height})`)
 				.call(d3.axisBottom(x));
+			*/
+			const xAxis = g.append("g")
+				.attr("class", "x-axis")
+				.attr("transform", `translate(0,${height})`)
+				.call(d3.axisBottom(x));
+			
+			const yAxis = g.append("g")
+				.attr("class", "y-axis")
+				.call(d3.axisLeft(y));
+			
+			// Y-axis should not overlay ontop of rescaling y-scale
 
-			g.append("g").call(d3.axisLeft(y));
+		// Auto Y-scaling function (called on zoom)
+		const updateYScaleIfNeeded = (zx: d3.ScaleLinear<number, number>) => {
+			if (!autoYScaling) return;
+
+			// Only consider points in visible X window
+			const [x0, x1] = zx.domain();
+
+			const visible = data.filter(d =>
+				d.artist_popularity >= x0 &&
+				d.artist_popularity <= x1
+			);
+
+			if (visible.length === 0) return;
+
+			const yMin = d3.min(visible, d => d.track_popularity)!;
+			const yMax = d3.max(visible, d => d.track_popularity)!;
+
+			y.domain([
+				Math.max(0, Math.floor(yMin)),
+				Math.ceil(yMax)
+			]).nice();
+
+			//yAxis.call(d3.axisLeft(y));
+			yAxis
+				.transition()
+				.duration(300)
+				.ease(d3.easeCubicOut)
+				.call(d3.axisLeft(y));
+
+			points
+				.transition()
+				.duration(300)
+				.ease(d3.easeCubicOut)
+				.attr("cy", d => y(d.track_popularity));
+
+			lines.forEach(({ genre, node }) => {
+				const subset = data.filter(d => d.genre === genre);
+				if (subset.length < 50) return;
+
+				const { slope, intercept } = linearRegression(subset);
+				const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
+
+				const y1 = slope * xExtent[0] + intercept;
+				const y2 = slope * xExtent[1] + intercept;
+
+				d3.select(node)
+					.transition()
+					.duration(300)
+					.ease(d3.easeCubicOut)
+					.attr("y1", y(y1))
+					.attr("y2", y(y2));
+			});
+		};
+
+			//g.append("g").call(d3.axisLeft(y));
+			// Removed as y-axis is now dynamic
 
 			// Axis labels
 			g.append("text")
@@ -93,7 +174,8 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 			/*
 				[ Box showing different points in the one spot ]
 			*/
-			g.selectAll("circle")
+			//g.selectAll("circle")
+			const points = plotLayer.selectAll("circle") //g.selectAll("circle")
 				.data(data)
 				.enter()
 				.append("circle")
@@ -104,6 +186,7 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 				.attr("opacity", 0.28);
 
 			// Per-genre linear trend regression lines (visual guides)
+			/*
 			GENRES.forEach(genre => {
 				const subset = data.filter(d => d.genre === genre);
 				if (subset.length < 50) return;
@@ -123,6 +206,40 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 					.attr("stroke-width", 3.5)
 					.attr("opacity", 1);
 			});
+			*/
+			//const lines: SVGLineElement[] = [];
+			// Issue: Storing bare DOM nodes --> can't easily update with D3
+			// Fix: Store objects ineads
+			const lines: { genre: string; node: SVGLineElement }[] = [];
+
+
+			GENRES.forEach(genre => {
+				const subset = data.filter(d => d.genre === genre);
+				if (subset.length < 50) return;
+
+				const { slope, intercept } = linearRegression(subset);
+
+				const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
+				const y1 = slope * xExtent[0] + intercept;
+				const y2 = slope * xExtent[1] + intercept;
+				const line = plotLayer.append("line") //g.append("line")
+					.attr("x1", x(xExtent[0]))
+					.attr("y1", y(y1))
+					.attr("x2", x(xExtent[1]))
+					.attr("y2", y(y2))
+					.attr("stroke", genreColorScale(genre))
+					.attr("stroke-width", 3.5)
+					.attr("opacity", 1);
+
+				//lines.push(line.node() as SVGLineElement);
+				// Object lines fix:
+				lines.push({
+					genre,
+					node: line.node() as SVGLineElement
+				});
+
+			});
+
 
 			// Legend
 			const legend = g.append("g")
@@ -169,6 +286,54 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 				.attr("y", 34)
 				.attr("font-size", "10px")
 				.text("Lines: per-genre linear least-squares fit");
+			
+			const zoom = d3.zoom<SVGSVGElement, unknown>()
+			.scaleExtent([1, 8])
+			.translateExtent([[0, 0], [width, height]])
+			.extent([[0, 0], [width, height]])
+			.on("zoom", (event) => {
+				currentTransform = event.transform;
+
+				const zx = event.transform.rescaleX(x);
+
+				// Update X axis
+				xAxis.call(d3.axisBottom(zx));
+
+				// Optional Y rescaling (scatter-safe)
+				updateYScaleIfNeeded(zx);
+
+				// Update points
+				points
+					//.attr("cx", d => zx(d.artist_popularity))
+					//.attr("cy", d => y(d.track_popularity));
+					.attr("cx", d => zx(d.artist_popularity));
+
+				// Update trend lines
+				lines.forEach(({ genre, node }) => {
+					const subset = data.filter(d => d.genre === genre);
+					if (subset.length < 50) return;
+
+					const { slope, intercept } = linearRegression(subset);
+					const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
+
+					const y1 = slope * xExtent[0] + intercept;
+					const y2 = slope * xExtent[1] + intercept;
+
+					d3.select(node)
+						/*
+						.attr("x1", zx(xExtent[0]))
+						.attr("y1", y(y1))
+						.attr("x2", zx(xExtent[1]))
+						.attr("y2", y(y2));
+						*/
+						// Handle Y only by updateYScaleIfNeeded
+						.attr("x1", zx(xExtent[0]))
+						.attr("x2", zx(xExtent[1]));
+				});
+			});
+
+
+			svg.call(zoom as any);
 		};
 
 		draw();
