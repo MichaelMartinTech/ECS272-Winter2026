@@ -8,6 +8,7 @@ type YearGenreRow = {
 	[key: string]: number;
 };
 
+
 export default function StreamGraph({
 	data,
 	onVisibleRangeChange
@@ -42,6 +43,21 @@ export default function StreamGraph({
 			const g = svg
 				.append("g")
 				.attr("transform", `translate(${margin.left},${margin.top})`);
+
+			const tooltip = d3.select("body")
+			.selectAll(".stream-tooltip")
+			.data([null])
+			.join("div")
+			.attr("class", "stream-tooltip")
+			.style("position", "absolute")
+			.style("pointer-events", "none")
+			.style("background", "white")
+			.style("border", "1px solid #ccc")
+			.style("padding", "8px")
+			.style("font-size", "12px")
+			.style("box-shadow", "0 2px 6px rgba(0,0,0,0.2)")
+			.style("display", "none");
+
 
 			// Clip path to prevent layers from drawing outside plot bounds
 			const defs = svg.append("defs");
@@ -110,6 +126,14 @@ export default function StreamGraph({
 						.tickFormat(d3.format("d"))
 				);
 
+			g.append("text")
+			.attr("x", width / 2)
+			.attr("y", height + 35)
+			.attr("text-anchor", "middle")
+			.attr("font-size", "12px")
+			.text("Release Year");
+
+
 			const yAxis = g.append("g")
 				.attr("class", "y-axis")
 				.call(
@@ -118,8 +142,49 @@ export default function StreamGraph({
 						.tickFormat(d3.format("d"))
 				);
 
+			g.append("text")
+			.attr("transform", "rotate(-90)")
+			.attr("x", -height / 2)
+			.attr("y", -45)
+			.attr("text-anchor", "middle")
+			.attr("font-size", "12px")
+			.text("#Tracks (Stacked by Genre)");
+
 			const layerGroup = g.append("g")
 				.attr("clip-path", "url(#stream-clip)");
+
+			/* =========================
+			HOVER OVERLAY LAYER
+			========================= */
+
+			const hoverLayer = g.append("g")
+				.attr("class", "hover-layer");
+
+			// --- Vertical hover line ---
+			const yearLine = hoverLayer.append("line")
+				.attr("y1", 0)
+				.attr("y2", height)
+				.attr("stroke", "black")
+				.attr("stroke-width", 1.5)
+				.attr("stroke-dasharray", "6 4")
+				.style("display", "none");
+
+			// Animate dashed line
+			function animateDash() {
+				yearLine
+					.transition()
+					.duration(800)
+					.ease(d3.easeLinear)
+					.attr("stroke-dashoffset", -10)
+					.on("end", animateDash);
+			}
+			animateDash();
+
+			// --- Year label ---
+			const yearLabel = hoverLayer.append("text")
+				.attr("font-size", "12px")
+				.attr("font-weight", "bold")
+				.style("display", "none");
 
 			const area = d3.area<any>()
 				.x(d => x(d.data.year))
@@ -134,7 +199,128 @@ export default function StreamGraph({
 				.attr("class", "layer")
 				.attr("d", area)
 				.attr("fill", d => genreColorScale(d.key))
-				.attr("opacity", 0.9);
+				.attr("opacity", 0.9)
+				.on("mousemove", function (event, layerData) {
+
+					const [mx] = d3.pointer(event);
+					const zx = zoomTransformRef.current.rescaleX(x);
+					const hoveredYear = Math.round(zx.invert(mx));
+
+					const lineX = zx(hoveredYear);
+
+					yearLine
+						.attr("x1", lineX)
+						.attr("x2", lineX)
+						.style("display", "block");
+
+					const [domainStart, domainEnd] = zx.domain();
+					const zoomSpan = domainEnd - domainStart;
+
+					if (zoomSpan > 5) {
+						yearLabel
+							.attr("x", lineX - 6)
+							.attr("y", -8)
+							.attr("text-anchor", "end")
+							.text(hoveredYear)
+							.style("display", "block");
+					} else {
+						yearLabel.style("display", "none");
+					}
+
+					// ---- Top genre for that year ----
+					const yearRow = aggregated.find(r => r.year === hoveredYear);
+					if (!yearRow) return;
+
+					let topGenre: string | null = null;
+					let maxVal = -Infinity;
+
+					GENRES.forEach(g => {
+						if (yearRow[g] > maxVal) {
+							maxVal = yearRow[g];
+							topGenre = g;
+						}
+					});
+					if (!topGenre) return;
+
+					const topLayerIndex = GENRES.indexOf(topGenre);
+					const topLayer = layers[topLayerIndex];
+
+					const topPoint = topLayer.find(d => d.data.year === hoveredYear);
+					if (!topPoint) return;
+
+					const yMid = y((topPoint[0] + topPoint[1]) / 2);
+
+
+					// Find matching year entry in stack
+					const yearEntry = layerData.find(d => d.data.year === hoveredYear);
+					if (!yearEntry) {
+						tooltip.style("display", "none");
+						return;
+					}
+
+					// If mouse is not inside the layer vertically, hide
+					const [_, my] = d3.pointer(event);
+					const yValue = y.invert(my);
+					if (yValue < yearEntry[0] || yValue > yearEntry[1]) {
+						tooltip.style("display", "none");
+						return;
+					}
+
+					const family = layerData.key;
+
+					// Compute subgenre breakdown
+					const tracksThisYear = data.filter(d =>
+						d.release_year === hoveredYear &&
+						d.genre === family
+					);
+
+					const subgenreCounts = new Map<string, number>();
+
+					tracksThisYear.forEach(track => {
+						const raw = track.rawGenres || "";
+						raw.split(",").forEach((g: string) => {
+							const trimmed = g.trim();
+							if (!trimmed) return;
+							subgenreCounts.set(
+								trimmed,
+								(subgenreCounts.get(trimmed) || 0) + 1
+							);
+						});
+					});
+
+					const orderedSubgenres = Array.from(subgenreCounts.entries())
+						.sort((a, b) => b[1] - a[1])
+						.map(d => d[0])
+						.slice(0, 8); // limit length
+
+					tooltip
+						.style("display", "block")
+						.style("left", event.pageX + 12 + "px")
+						.style("top", event.pageY - 28 + "px")
+						.html(`
+							<div style="display:flex; align-items:center; margin-bottom:4px;">
+								<div style="
+									width:10px;
+									height:10px;
+									background:${genreColorScale(family)};
+									margin-right:6px;">
+								</div>
+								<strong>Family:</strong>&nbsp;${family}
+							</div>
+							<div><strong>Year:</strong> ${hoveredYear}</div>
+							<div><strong>Genres/Subgenres:</strong> ${
+								orderedSubgenres.length
+									? orderedSubgenres.join(", ")
+									: "None"
+							}</div>
+						`);
+				})
+				.on("mouseleave", () => {
+					tooltip.style("display", "none");
+					yearLine.style("display", "none");
+					yearLabel.style("display", "none");
+					//topFlag.style("display", "none"); // Removed flag - Data better shown in mean track tooltip 
+				});
 
 			//let magnitudeScalingEnabled = true;
 			let rafId = 0;
@@ -210,10 +396,15 @@ export default function StreamGraph({
 
 
 			const zoom = d3.zoom<SVGSVGElement, unknown>()
-				.scaleExtent([1, 8])
+				.scaleExtent([1, 80])
 				.translateExtent([[0, 0], [width, height]])
 				.extent([[0, 0], [width, height]])
 				.on("zoom", (event) => {
+					yearLine.style("display", "none");
+					yearLabel.style("display", "none");
+					//topFlag.style("display", "none");
+					tooltip.style("display", "none");
+
 					currentTransform = event.transform;
 					zoomTransformRef.current = event.transform;
 					if (rafId) cancelAnimationFrame(rafId);

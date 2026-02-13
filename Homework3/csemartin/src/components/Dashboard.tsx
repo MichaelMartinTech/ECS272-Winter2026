@@ -11,13 +11,15 @@ export type Track = {
 	artist_popularity: number;
 	artist_followers: number;
 	release_year: number;
-	genre: string;
 	danceability: number;
 	energy: number;
 	valence: number;
 	tempo: number;
 	duration_ms: number;
 	explicit: number;
+	// Added
+	genre: string;
+	rawGenres?: string;
 };
 
 /*
@@ -220,13 +222,15 @@ export default function Dashboard() {
 					artist_followers: +d.artist_followers!,
 					release_year: new Date(d.album_release_date!).getFullYear(),
 					//genre: normalizeGenre(primaryGenre),
-					genre: classified,
+					//genre: classified,
 					danceability: +d.danceability!,
 					energy: +d.energy!,
 					valence: +d.valence!,
 					tempo: +d.tempo!,
 					duration_ms: +d.duration_ms!,
-					explicit: +d.explicit!
+					explicit: +d.explicit!,
+					genre: classified,
+					rawGenres: rawGenre
 				};
 			});
 
