@@ -20,11 +20,12 @@ export type Track = {
 	explicit: number;
 };
 
+/*
 function normalizeGenre(raw: string): string {
 	if (!raw) return "Other";
 	const g = raw.toLowerCase();
 
-	if (g.includes("pop")) return "pop";
+	if (g.includes("pop")) return "pop"; // k-pop, j-pop, etc are collapsed, and empty strings become "other"
 	if (g.includes("rap") || g.includes("hip")) return "rap";
 	if (g.includes("edm") || g.includes("electronic")) return "edm";
 	if (g.includes("country")) return "country";
@@ -35,6 +36,89 @@ function normalizeGenre(raw: string): string {
 
 	return "Other";
 }
+*/
+
+// Genre families
+function normalizeGenre(raw: string): string {
+	if (!raw) return "Other";
+	const g = raw.toLowerCase();
+
+	// --- POP FAMILY ---
+	if (
+		g.includes("k-pop") ||
+		g.includes("j-pop") ||
+		g.includes("dance pop") ||
+		g.includes("electropop") ||
+		g.includes("teen pop") ||
+		g.includes("indie pop") ||
+		g.includes("dream pop") ||
+		g === "pop" ||
+		g.includes(" pop")
+	) return "Pop";
+
+	// --- HIP-HOP / RAP ---
+	if (
+		g.includes("trap") ||
+		g.includes("rap") ||
+		g.includes("hip")
+	) return "Hip-Hop / Rap";
+
+	// --- ROCK / ALTERNATIVE ---
+	if (
+		g.includes("alternative") ||
+		g.includes("indie rock") ||
+		g.includes("modern rock") ||
+		g.includes("grunge") ||
+		g.includes("metal") ||
+		g.includes("rock")
+	) return "Rock / Alternative";
+
+	// --- ELECTRONIC / EDM ---
+	if (
+		g.includes("house") ||
+		g.includes("techno") ||
+		g.includes("dubstep") ||
+		g.includes("trance") ||
+		g.includes("electronic") ||
+		g.includes("edm")
+	) return "Electronic / EDM";
+
+	// --- R&B / SOUL ---
+	if (
+		g.includes("neo soul") ||
+		g.includes("r&b") ||
+		g.includes("rnb") ||
+		g.includes("soul")
+	) return "R&B / Soul";
+
+	// --- LATIN ---
+	if (
+		g.includes("reggaeton") ||
+		g.includes("latin")
+	) return "Latin";
+
+	// --- COUNTRY / FOLK ---
+	if (
+		g.includes("contemporary country") ||
+		g.includes("country") ||
+		g.includes("folk")
+	) return "Country / Folk";
+
+	// --- JAZZ / GOSPEL ---
+	if (
+		g.includes("jazz") ||
+		g.includes("gospel")
+	) return "Jazz / Gospel";
+
+	// --- SOUNDTRACK ---
+	if (
+		g.includes("soundtrack") ||
+		g.includes("score")
+	) return "Soundtrack";
+
+	return "Other";
+}
+
 
 export default function Dashboard() {
 	const [data, setData] = useState<Track[] | null>(null);
@@ -48,22 +132,106 @@ export default function Dashboard() {
 
 	// Load data ONCE
 	useEffect(() => {
-		d3.csv("/data/track_data_final.csv").then(raw => {
-			const parsed: Track[] = raw.map(d => ({
-				track_popularity: +d.track_popularity!,
-				artist_popularity: +d.artist_popularity!,
-				artist_followers: +d.artist_followers!,
-				release_year: new Date(d.album_release_date!).getFullYear(),
-				genre: normalizeGenre(d.artist_genres),
-				danceability: +d.danceability!,
-				energy: +d.energy!,
-				valence: +d.valence!,
-				tempo: +d.tempo!,
-				duration_ms: +d.duration_ms!,
-				explicit: +d.explicit!
-			}));
+		//d3.csv("/data/track_data_final.csv").then(raw => {
+		Promise.all([
+			d3.csv("/data/track_data_final.csv"),
+			d3.csv("/data/spotify_data_clean.csv")
+		]).then(([trackRaw, cleanRaw]) => {
+			// Build lookup from clean dataset
+			const cleanGenreMap = new Map<string, string>();
+
+			cleanRaw.forEach(d => {
+				const artist = d.artist_name?.trim();
+				const genres = d.artist_genres?.trim();
+
+				if (artist && genres) {
+					cleanGenreMap.set(artist.toLowerCase(), genres);
+				}
+			});
+
+			//const parsed: Track[] = raw.map(d => ({
+			const parsed: Track[] = trackRaw.map(d => {
+
+				// Primary genre from track_data_final
+				let rawGenre = (d.artist_genres || "").trim();
+
+				// Treat invalid placeholders as empty so fallback can happen
+				if (
+					rawGenre === "" ||
+					rawGenre === "[]" ||
+					rawGenre === "[ ]" ||
+					rawGenre.toLowerCase() === "null"
+				) {
+					rawGenre = "";
+				}
+
+				// Fallback to clean dataset if empty
+				if (!rawGenre || rawGenre.trim() === "") {
+					const fallback = cleanGenreMap.get(d.artist_name?.toLowerCase() || "");
+					if (fallback) rawGenre = fallback;
+				}
+
+				// Remove brackets if list-style string
+				rawGenre = rawGenre.replace(/[\[\]']/g, "");
+
+				// Split by comma and take first token
+				const genreTokens = rawGenre
+					.split(",")
+					.map(s => s.trim())
+					.filter(Boolean);
+
+				// Try to classify using family precedence (not token order)
+				let classified = "Other";
+
+				// Define precedence order (modern --> legacy)
+				const familyPrecedence = [
+					"Pop",
+					"Hip-Hop / Rap",
+					"Rock / Alternative",
+					"Electronic / EDM",
+					"R&B / Soul",
+					"Latin",
+					"Country / Folk",
+					"Jazz / Gospel",
+					"Soundtrack"
+				];
+
+				// Collect ALL candidate families present
+				const candidateFamilies = new Set<string>();
+
+				for (const token of genreTokens) {
+					const fam = normalizeGenre(token);
+					if (fam !== "Other") {
+						candidateFamilies.add(fam);
+					}
+				}
+
+				// Apply precedence AFTER collecting
+				for (const family of familyPrecedence) {
+					if (candidateFamilies.has(family)) {
+						classified = family;
+						break;
+					}
+				}
+
+				return {
+					track_popularity: +d.track_popularity!,
+					artist_popularity: +d.artist_popularity!,
+					artist_followers: +d.artist_followers!,
+					release_year: new Date(d.album_release_date!).getFullYear(),
+					//genre: normalizeGenre(primaryGenre),
+					genre: classified,
+					danceability: +d.danceability!,
+					energy: +d.energy!,
+					valence: +d.valence!,
+					tempo: +d.tempo!,
+					duration_ms: +d.duration_ms!,
+					explicit: +d.explicit!
+				};
+			});
 
 			setData(parsed);
+			
 		});
 	}, []);
 
@@ -71,6 +239,7 @@ export default function Dashboard() {
 		return <div style={{ padding: "20px" }}>Loading data…</div>;
 	}
 
+	// /* Note: Add Toggle for these - Button that opens [About] */
 	return (
 		<div className="page">
 		<h2 className="dashboard-title">
@@ -79,22 +248,21 @@ export default function Dashboard() {
 				How Genre and Artist Visibility Shape Track Popularity Over Time
 			</span>
 		</h2>
-
 		<div className="dashboard-subtitle">
 			<div className="figure-guide">
 				<strong>Figure guide.</strong>
 				<span>
-					<strong>(Top)</strong> Stream graph — year-by-year genre composition.
+					<strong>(Top)</strong> Stream graph — year-by-year genre family composition.
 					<em> Area thickness</em> encodes relative genre prevalence within each year (wiggle-offset for readability).
 				</span>
 				<span>
 					<br></br>
 					<strong>(Bottom-left)</strong> Scatter + trend lines — association between artist popularity and track popularity.
-					<em> Point size</em> = artist followers; <em>color</em> = genre; <em>lines</em> = per-genre least-squares fit.
+					<em> Point size</em> = artist followers; <em>color</em> = genre family; <em>lines</em> = per-genre least-squares fit.
 				</span>
 				<span>
 					<br></br>
-					<strong>(Bottom-right)</strong> Bar chart — baseline track popularity by genre.
+					<strong>(Bottom-right)</strong> Bar chart — baseline track popularity by genre family.
 					<em> Bar height</em> = mean popularity; <em>error bar (variability)</em> = ±1 standard deviation.
 				</span>
 			</div>
@@ -104,6 +272,20 @@ export default function Dashboard() {
 				<strong>Objective:</strong> Does genre context and artist popularity jointly structure track popularity,
 				and whether genres differ in baseline popularity and variability.
 			</div>
+
+			<div className="genre-family-note">
+				<br></br>
+				<strong>Genre Families (modern → legacy):</strong> Individual Spotify subgenres are aggregated into broader genre families for clearer visualization and analysis.
+				<br></br>When artists are associated with multiple genres, classification order emphasizes contemporary mainstream categories. <b>(e.g., Pop before Country / Folk)</b><br></br>
+			</div>
+
+			<div>
+				<br></br>
+				<strong>Families:</strong> <b>Pop</b> (e.g., K-pop, dance pop), Hip-Hop / Rap (e.g., trap),
+				Rock / Alternative (e.g., indie rock, metal), Electronic / EDM (e.g., house, techno),
+				R&B / Soul, Latin, Country / Folk, Jazz / Gospel, and Soundtrack.
+			</div>
+
 		</div>
 
 

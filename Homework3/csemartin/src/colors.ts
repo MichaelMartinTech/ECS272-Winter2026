@@ -1,27 +1,30 @@
 import * as d3 from "d3";
 
+// Genre families
 export const GENRES = [
-	"pop",
-	"rap",
-	"edm",
-	"country",
-	"soft pop",
-	"soundtrack",
-	"art pop",
-	"dark r&b",
+	"Pop",
+	"Hip-Hop / Rap",
+	"Rock / Alternative",
+	"Electronic / EDM",
+	"R&B / Soul",
+	"Latin",
+	"Country / Folk",
+	"Jazz / Gospel",
+	"Soundtrack",
 	"Other"
 ];
 
 export const GENRE_COLORS: Record<string, string> = {
-	"pop": "#1f77b4",        // blue
-	"rap": "#ff7f0e",        // orange
-	"edm": "#2ca02c",        // green
-	"country": "#9467bd",    // purple (distinct from pop blue)
-	"soft pop": "#17becf",   // cyan (lighter, but different hue)
-	"soundtrack": "#bcbd22", // olive/yellow-green
-	"art pop": "#e377c2",    // pink/magenta
-	"dark r&b": "#d62728",   // red (kept strong)
-	"Other": "#7f7f7f"       // neutral gray
+	"Pop": "#1f77b4",                // blue
+	"Hip-Hop / Rap": "#ff7f0e",      // orange
+	"Electronic / EDM": "#2ca02c",   // green
+	"Country / Folk": "#9467bd",     // purple
+	"R&B / Soul": "#d62728",         // red
+	"Soundtrack": "#bcbd22",         // olive
+	"Rock / Alternative": "#8c564b", // brown (distinct)
+	"Latin": "#17becf",              // cyan (distinct)
+	"Jazz / Gospel": "#e377c2",      // magenta
+	"Other": "#7f7f7f"               // gray
 };
 
 export const genreColorScale = d3
