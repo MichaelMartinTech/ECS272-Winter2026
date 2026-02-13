@@ -247,7 +247,7 @@ export default function Dashboard() {
 	return (
 		<div className="page">
 		<h2 className="dashboard-title">
-			Genre, Popularity, and Temporal Structure in Contemporary Music
+			<b>Genre Families</b>: Genre, Popularity, and Temporal Structure in Contemporary Music
 			<span className="dashboard-title-sub">
 				How Genre and Artist Visibility Shape Track Popularity Over Time
 			</span>

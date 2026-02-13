@@ -169,17 +169,6 @@ export default function StreamGraph({
 				.attr("stroke-dasharray", "6 4")
 				.style("display", "none");
 
-			// Animate dashed line
-			function animateDash() {
-				yearLine
-					.transition()
-					.duration(800)
-					.ease(d3.easeLinear)
-					.attr("stroke-dashoffset", -10)
-					.on("end", animateDash);
-			}
-			animateDash();
-
 			// --- Year label ---
 			const yearLabel = hoverLayer.append("text")
 				.attr("font-size", "12px")
@@ -267,6 +256,7 @@ export default function StreamGraph({
 					}
 
 					const family = layerData.key;
+					const trueCount = yearRow[family] ?? 0;
 
 					// Compute subgenre breakdown
 					const tracksThisYear = data.filter(d =>
@@ -305,10 +295,15 @@ export default function StreamGraph({
 									background:${genreColorScale(family)};
 									margin-right:6px;">
 								</div>
-								<strong>Family:</strong>&nbsp;${family}
+								<strong>Genre Family:</strong>&nbsp;${family}
 							</div>
-							<div><strong>Year:</strong> ${hoveredYear}</div>
-							<div><strong>Genres/Subgenres:</strong> ${
+							<div><strong>Release Year:</strong> ${hoveredYear}</div>
+							<div><strong>Tracks (Actual Count):</strong> ${trueCount}</div>
+							<div><strong>Subgenres:</strong> ${
+							orderedSubgenres.length
+								? orderedSubgenres.join(", ")
+								: "None"
+							}</div> ${
 								orderedSubgenres.length
 									? orderedSubgenres.join(", ")
 									: "None"
@@ -375,7 +370,7 @@ export default function StreamGraph({
 				}
 
 				yAxis.transition()
-					.duration(150)
+					.duration(60)
 					.call(
 						d3.axisLeft(y)
 							.ticks(8)
