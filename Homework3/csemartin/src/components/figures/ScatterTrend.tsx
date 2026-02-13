@@ -371,6 +371,7 @@ export default function ScatterTrend({
 							<div><strong>Track:</strong> ${d.track_name}</div>
 							<div><strong>Artist:</strong> ${d.artist_name}</div>
 							<div><strong>Duration:</strong> ${formatDuration(d.duration_ms)}</div>
+							<div><strong>Release Year:</strong> ${d.release_year}</div>
 							<div><strong>Genre Family:</strong> ${d.genre}</div>
 							<div><strong>Subgenres:</strong> ${
 								subgenres.length ? subgenres.slice(0, 6).join(", ") : "None"
