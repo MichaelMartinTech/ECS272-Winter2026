@@ -21,6 +21,7 @@ export type Track = {
 	genre: string;
 	rawGenres?: string;
 	artist_name: string;
+	track_name: string;
 };
 
 /*
@@ -236,7 +237,8 @@ export default function Dashboard() {
 					explicit: +d.explicit!,
 					genre: classified,
 					rawGenres: rawGenre,
-					artist_name: d.artist_name?.trim() || ""
+					artist_name: d.artist_name?.trim() || "",
+					track_name: d.track_name?.trim() || ""
 				};
 			});
 

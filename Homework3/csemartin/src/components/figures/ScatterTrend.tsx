@@ -22,6 +22,25 @@ function linearRegression(points: Track[]) {
 	return { slope, intercept };
 }
 
+function formatDuration(ms: number): string {
+    if (!ms || !Number.isFinite(ms)) return "N/A";
+
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const mm = String(minutes).padStart(2, "0");
+    const ss = String(seconds).padStart(2, "0");
+
+    if (hours > 0) {
+        const hh = String(hours).padStart(2, "0");
+        return `${hh}:${mm}:${ss}`;
+    }
+
+    return `${mm}:${ss}`;
+}
+
 export default function ScatterTrend({
 	data,
 	selectedArtist,
@@ -71,11 +90,28 @@ export default function ScatterTrend({
 			const plotLayer = g.append("g")
 				.attr("clip-path", "url(#scatter-clip)");
 
+			const tooltip = d3.select("body")
+				.selectAll(".scatter-tooltip")
+				.data([null])
+				.join("div")
+				.attr("class", "scatter-tooltip")
+				.style("position", "absolute")
+				.style("pointer-events", "none")
+				.style("background", "white")
+				.style("border", "1px solid #ccc")
+				.style("padding", "8px")
+				.style("font-size", "12px")
+				.style("box-shadow", "0 2px 6px rgba(0,0,0,0.2)")
+				.style("display", "none");
+
+
 			// Scales
 			const x = d3.scaleLinear().domain([0, 100]).range([0, width]);
 			const y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
 
-			const normalizedSelected = selectedArtist ? selectedArtist.trim().toLowerCase(): null;
+			//const normalizedSelected = selectedArtist ? selectedArtist.trim().toLowerCase(): null;
+			const normalizedSelected: string | null =
+				selectedArtist ? selectedArtist.trim().toLowerCase() : null;
 
 			console.log(
 				data.filter(d =>
@@ -95,7 +131,7 @@ export default function ScatterTrend({
 					Math.max(1, followerExtent[0] ?? 1),
 					Math.max(2, followerExtent[1] ?? 2)
 				])
-				.range([1.0, 4.0]);
+				.range([2, 10.0]); // Originally 2-4 size range, but increased for better visibility in scatter plot
 
 			// Axes
 			/*
@@ -208,13 +244,19 @@ export default function ScatterTrend({
 				.attr("fill", d => genreColorScale(d.genre))
 
 				.attr("opacity", d => {
+
+				const isSelected =
+					normalizedSelected !== null &&
+					d.artist_name.trim().toLowerCase() === normalizedSelected;
+
+					// Always show selected artist
+					if (isSelected) return 1;
+
+					// If points disabled, hide everything else
 					if (!showArtistPoints) return 0;
 
-					if (selectedArtist) {
-						return d.artist_name.trim().toLowerCase() === normalizedSelected ? 1 : 0.12;
-					}
-
-					return 0.28;
+					// Otherwise normal behavior
+					return selectedArtist ? 0.12 : 0.28;
 				})
 
 				.attr("stroke", d =>
@@ -228,8 +270,46 @@ export default function ScatterTrend({
 					d.artist_name.trim().toLowerCase() === normalizedSelected
 						? 2
 						: 0
-				);
+				)
 
+				.on("mousemove", function (event, d) {
+
+					const isSelected =
+						selectedArtist &&
+						d.artist_name.trim().toLowerCase() === normalizedSelected;
+
+					// Only show tooltip for selected artist
+					if ((!isSelected && !showArtistPoints) || (!isSelected && selectedArtist)) {
+						tooltip.style("display", "none");
+						return;
+					}
+
+					const subgenres = d.rawGenres
+						? d.rawGenres.split(",").map(s => s.trim()).filter(Boolean)
+						: [];
+
+					tooltip
+						.style("display", "block")
+						.style("left", event.pageX + 12 + "px")
+						.style("top", event.pageY - 28 + "px")
+						.html(`
+							<div style="margin-bottom:4px;">
+								<strong>Track:</strong> ${d.track_name}
+							</div>
+							<div><strong>Artist:</strong> ${d.artist_name}</div>
+							<div><strong>Duration:</strong> ${formatDuration(d.duration_ms)}</div>
+							<div><strong>Genre Family:</strong> ${d.genre}</div>
+							<div><strong>Subgenres:</strong> ${
+								subgenres.length ? subgenres.slice(0, 6).join(", ") : "None"
+							}</div>
+							<div><strong>Track Popularity:</strong> ${d.track_popularity}</div>
+							<div><strong>Artist Popularity:</strong> ${d.artist_popularity}</div>
+							<div><strong>Followers:</strong> ${d.artist_followers.toLocaleString()}</div>
+						`);
+				})
+				.on("mouseleave", () => {
+					tooltip.style("display", "none");
+				});
 
 			// Per-genre linear trend regression lines (visual guides)
 			/*
