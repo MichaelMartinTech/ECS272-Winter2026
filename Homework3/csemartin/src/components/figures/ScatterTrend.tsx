@@ -4,18 +4,37 @@ import { GENRES, genreColorScale } from "../../colors";
 import type { Track } from "../Dashboard";
 
 // Linear regression utility (returns slope and intercept)
-function linearRegression(points: Track[]) {
-	const n = points.length;
-	const meanX = d3.mean(points, d => d.artist_popularity)!;
-	const meanY = d3.mean(points, d => d.track_popularity)!;
-	// Calculate slope (m) and intercept (b) for y = mx + b
+function linearRegression(
+	points: Track[],
+	xField: keyof Track,
+	yField: keyof Track
+) {
+	const filtered = points.filter(d =>
+		Number.isFinite(Number(d[xField])) &&
+		Number.isFinite(Number(d[yField]))
+	);
+
+	if (filtered.length < 2) {
+		return { slope: 0, intercept: 0 };
+	}
+
+	const xs = filtered.map(d => Number(d[xField]));
+	const ys = filtered.map(d => Number(d[yField]));
+
+	const meanX = d3.mean(xs)!;
+	const meanY = d3.mean(ys)!;
+
 	let num = 0;
 	let den = 0;
 
-	points.forEach(d => {
-		num += (d.artist_popularity - meanX) * (d.track_popularity - meanY);
-		den += (d.artist_popularity - meanX) ** 2;
-	});
+	for (let i = 0; i < xs.length; i++) {
+		num += (xs[i] - meanX) * (ys[i] - meanY);
+		den += (xs[i] - meanX) ** 2;
+	}
+
+	if (den === 0) {
+		return { slope: 0, intercept: meanY };
+	}
 
 	const slope = num / den;
 	const intercept = meanY - slope * meanX;
@@ -73,15 +92,23 @@ export default function ScatterTrend({
 	data,
 	selectedArtist,
 	showArtistPoints,
-	showArtistLines
+	showArtistLines,
+	xField,
+	yField,
+	sizeField,
+	xLabel,
+	yLabel
 }: {
 	data: Track[];
 	selectedArtist: string | null;
 	showArtistPoints: boolean;
 	showArtistLines: boolean;
+	xField: keyof Track;
+	yField: keyof Track;
+	sizeField: keyof Track;
+	xLabel: string;
+	yLabel: string;
 }) {
-
-
 
 	// SCATTER PLOT + TRENDLINES
 	useEffect(() => {
@@ -142,8 +169,29 @@ export default function ScatterTrend({
 
 
 			// Scales
-			const x = d3.scaleLinear().domain([0, 100]).range([0, width]);
-			const y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+			//const x = d3.scaleLinear().domain([0, 100]).range([0, width]);
+			//const y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+			//const xExtent = d3.extent(data, d => Number(d[xField])) as [number, number];
+			const validData = data.filter(d =>
+				Number.isFinite(Number(d[xField])) &&
+				Number.isFinite(Number(d[yField]))
+			);
+
+			const xExtent = d3.extent(validData, d => Number(d[xField])) as [number, number];
+			const yExtent = d3.extent(validData, d => Number(d[yField])) as [number, number];
+
+			//const yExtent = d3.extent(data, d => Number(d[yField])) as [number, number];
+
+			const x = d3.scaleLinear()
+				.domain(xExtent)
+				.nice()
+				.range([0, width]);
+
+			const y = d3.scaleLinear()
+				.domain(yExtent)
+				.nice()
+				.range([height, 0]);
+
 
 			//const normalizedSelected = selectedArtist ? selectedArtist.trim().toLowerCase(): null;
 			const normalizedSelected: string | null =
@@ -156,6 +204,7 @@ export default function ScatterTrend({
 			);
 
 			// Radius scale (followers -> point size)
+			/*
 			const followerVals = data
 				.map(d => d.artist_followers)
 				.filter(v => Number.isFinite(v) && v > 0);
@@ -168,6 +217,20 @@ export default function ScatterTrend({
 					Math.max(2, followerExtent[1] ?? 2)
 				])
 				.range([2, 10.0]); // Originally 2-4 size range, but increased for better visibility in scatter plot
+			*/
+			// Dynamic radius scale (based on selected sizeField)
+			const sizeVals = data
+				.map(d => Number(d[sizeField]))
+				.filter(v => Number.isFinite(v) && v > 0);
+
+			const sizeExtent = d3.extent(sizeVals) as [number, number];
+
+			const r = d3.scaleSqrt()
+				.domain([
+					Math.max(1, sizeExtent[0] ?? 1),
+					Math.max(2, sizeExtent[1] ?? 2)
+				])
+				.range([2, 10]);
 
 			// Axes
 			/*
@@ -193,15 +256,15 @@ export default function ScatterTrend({
 			// Only consider points in visible X window
 			const [x0, x1] = zx.domain();
 
-			const visible = data.filter(d =>
-				d.artist_popularity >= x0 &&
-				d.artist_popularity <= x1
-			);
+			const visible = data.filter(d => {
+				const xVal = Number(d[xField]);
+				return xVal >= x0 && xVal <= x1;
+			});
 
 			if (visible.length === 0) return;
 
-			const yMin = d3.min(visible, d => d.track_popularity)!;
-			const yMax = d3.max(visible, d => d.track_popularity)!;
+			const yMin = d3.min(visible, d => Number(d[yField]))!;
+			const yMax = d3.max(visible, d => Number(d[yField]))!;
 
 			y.domain([
 				Math.max(0, Math.floor(yMin)),
@@ -219,14 +282,14 @@ export default function ScatterTrend({
 				.transition()
 				.duration(300)
 				.ease(d3.easeCubicOut)
-				.attr("cy", d => y(d.track_popularity));
+				.attr("cy", d => y(Number(d[yField] ?? 0)));
 
 			lines.forEach(({ genre, node }) => {
 				const subset = data.filter(d => d.genre === genre);
 				if (subset.length < 50) return;
 
-				const { slope, intercept } = linearRegression(subset);
-				const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
+				const { slope, intercept } = linearRegression(subset, xField, yField);
+				const xExtent = d3.extent(subset, d => Number(d[xField])) as [number, number];
 
 				const y1 = slope * xExtent[0] + intercept;
 				const y2 = slope * xExtent[1] + intercept;
@@ -249,7 +312,7 @@ export default function ScatterTrend({
 				.attr("y", height + 40)
 				.attr("text-anchor", "middle")
 				.attr("font-size", "12px")
-				.text("Artist Popularity (Spotify Score)");
+				.text(xLabel); //.text(String(xField)); //.text("Artist Popularity (Spotify Score)");
 
 			g.append("text")
 				.attr("transform", "rotate(-90)")
@@ -257,7 +320,7 @@ export default function ScatterTrend({
 				.attr("y", -45)
 				.attr("text-anchor", "middle")
 				.attr("font-size", "12px")
-				.text("Track Popularity (Spotify Score)");
+				.text(yLabel); //.text(String(yField)); //.text("Track Popularity (Spotify Score)");
 
 			// Points (de-emphasized)
 			// Idea for later (HW 3): Interactivity- showing information in box over mouse
@@ -269,13 +332,14 @@ export default function ScatterTrend({
 			//g.selectAll("circle")
 			const points = plotLayer
 				.selectAll<SVGCircleElement, Track>("circle")
-				.data(data)
+				//.data(data)
+				.data(validData) // Filter out invalid data points for plotting
 				.enter()
 				.append("circle")
 				
-				.attr("cx", d => x(d.artist_popularity))
-				.attr("cy", d => y(d.track_popularity))
-				.attr("r", d => r(Math.max(1, d.artist_followers)))
+				.attr("cx", d => x(Number(d[xField] ?? 0)))
+				.attr("cy", d => y(Number(d[yField] ?? 0)))
+				.attr("r", d => r(Math.max(1, Number(d[sizeField] ?? 0))))
 				//.attr("fill", d => genreColorScale(d.genre))
 				//.attr("opacity", 0.28);
 				.attr("fill", d => genreColorScale(d.genre))
@@ -350,9 +414,9 @@ export default function ScatterTrend({
 					hoverLayer.selectAll("*").remove();
 
 					hoverLayer.append("circle")
-						.attr("cx", x(d.artist_popularity))
-						.attr("cy", y(d.track_popularity))
-						.attr("r", r(Math.max(1, d.artist_followers)) + 2)
+						.attr("cx", x(Number(d[xField])))
+						.attr("cy", y(Number(d[yField])))
+						.attr("r", r(Math.max(1, Number(d[sizeField]))) + 2)
 						.attr("fill", "none")
 						.attr("stroke", isSelected ? "gold" : invertColor(genreColorScale(d.genre)))
 						.attr("stroke-width", 4)
@@ -422,12 +486,12 @@ export default function ScatterTrend({
 
 
 			GENRES.forEach(genre => {
-				const subset = data.filter(d => d.genre === genre);
+				const subset = validData.filter(d => d.genre === genre); // data swapped for validData
 				if (subset.length < 50) return;
 
-				const { slope, intercept } = linearRegression(subset);
+				const { slope, intercept } = linearRegression(subset, xField, yField);
 
-				const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
+				const xExtent = d3.extent(subset, d => Number(d[xField])) as [number, number];
 				const y1 = slope * xExtent[0] + intercept;
 				const y2 = slope * xExtent[1] + intercept;
 				const line = plotLayer.append("line")
@@ -452,13 +516,80 @@ export default function ScatterTrend({
 			});
 
 
+
+			// SELECTED ARTIST REGRESSION LINE
+			if (normalizedSelected !== null) {
+
+				const artistSubset = validData.filter(d =>
+					d.artist_name.trim().toLowerCase() === normalizedSelected
+				);
+
+				if (artistSubset.length >= 2) {
+
+					const { slope, intercept } =
+						linearRegression(artistSubset, xField, yField);
+
+					const xDomain = x.domain();
+
+					const y1 = slope * xDomain[0] + intercept;
+					const y2 = slope * xDomain[1] + intercept;
+
+					const artistLine = plotLayer.append("line")
+						.attr("x1", x(xDomain[0]))
+						.attr("y1", y(y1))
+						.attr("x2", x(xDomain[1]))
+						.attr("y2", y(y2))
+						.attr("stroke", "black")
+						.attr("stroke-width", 4.5)
+						.attr("opacity", 1)
+						.attr("pointer-events", "none")
+						.attr("vector-effect", "non-scaling-stroke");
+
+					// Always render ABOVE genre lines
+					artistLine.raise();
+
+					// Save for zoom updating
+					lines.push({
+						genre: "__artist__",
+						node: artistLine.node() as SVGLineElement
+					});
+				}
+			}
+
 			// Legend
 			const legend = g.append("g")
 				.attr("transform", `translate(${width + 10}, 0)`);
 
+			// Selected legend artist
+			let legendOffset = 0;
+
+			if (selectedArtist) {
+
+				const row = legend.append("g")
+					.attr("transform", `translate(0, 0)`);
+
+				row.append("circle")
+					.attr("cx", 5)
+					.attr("cy", 5)
+					.attr("r", 5)
+					.attr("fill", "white")
+					.attr("stroke", "black")
+					.attr("stroke-width", 2);
+
+				row.append("text")
+					.attr("x", 14)
+					.attr("y", 9)
+					.attr("font-size", "10px")
+					.attr("font-weight", "bold")
+					.text(`${selectedArtist}`);
+
+				legendOffset = 20;  // push genre rows down
+			}
+
+
 			GENRES.forEach((genre, i) => {
 				const row = legend.append("g")
-					.attr("transform", `translate(0, ${i * 16})`)
+					.attr("transform", `translate(0, ${i * 16 + legendOffset})`) //.attr("transform", `translate(0, ${i * 16})`)
 					.style("cursor", "pointer");
 
 				const rect = row.append("rect")
@@ -484,9 +615,17 @@ export default function ScatterTrend({
 						);
 
 					lines.forEach(({ genre: g, node }) => {
+
+						// NEVER hide selected artist regression
+						if (g === "__artist__") {
+							d3.select(node).attr("opacity", 1);
+							return;
+						}
+
 						d3.select(node)
 							.attr("opacity", g === genre ? 1 : 0);
 					});
+
 				});
 
 				row.on("mouseleave", function () {
@@ -507,11 +646,18 @@ export default function ScatterTrend({
 						});
 
 					lines.forEach(({ genre: g, node }) => {
+
+						if (g === "__artist__") {
+							d3.select(node).attr("opacity", 1);
+							return;
+						}
+
 						d3.select(node)
 							.attr("opacity",
 								showArtistLines && genreVisibility.get(g) ? 1 : 0
 							);
 					});
+
 				});
 
 
@@ -552,27 +698,6 @@ export default function ScatterTrend({
 				});
 			});
 
-
-			if (selectedArtist) {
-				const row = legend.append("g")
-					.attr("transform", `translate(0, ${GENRES.length * 16 + 10})`);
-
-				row.append("circle")
-					.attr("cx", 5)
-					.attr("cy", 5)
-					.attr("r", 5)
-					.attr("fill", "white")
-					.attr("stroke", "black")
-					.attr("stroke-width", 2);
-
-				row.append("text")
-					.attr("x", 14)
-					.attr("y", 9)
-					.attr("font-size", "10px")
-					.text(`${selectedArtist} (Artist)`);
-			}
-
-
 			const zoom = d3.zoom<SVGSVGElement, unknown>()
 			.scaleExtent([1, 8])
 			.translateExtent([[0, 0], [width, height]])
@@ -592,29 +717,37 @@ export default function ScatterTrend({
 				points
 					//.attr("cx", d => zx(d.artist_popularity))
 					//.attr("cy", d => y(d.track_popularity));
-					.attr("cx", d => zx(d.artist_popularity));
+					.attr("cx", d => zx(Number(d[xField] ?? 0)))
+					.attr("cy", d => y(Number(d[yField] ?? 0)));
 
 				// Update trend lines
 				lines.forEach(({ genre, node }) => {
-					const subset = data.filter(d => d.genre === genre);
-					if (subset.length < 50) return;
 
-					const { slope, intercept } = linearRegression(subset);
-					const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
+					let subset: Track[];
 
-					const y1 = slope * xExtent[0] + intercept;
-					const y2 = slope * xExtent[1] + intercept;
+					if (genre === "__artist__" && normalizedSelected !== null) {
+						subset = validData.filter(d =>
+							d.artist_name.trim().toLowerCase() === normalizedSelected
+						);
+					} else {
+						subset = validData.filter(d => d.genre === genre);
+					}
+
+					if (subset.length < 2) return;
+
+					const { slope, intercept } =
+						linearRegression(subset, xField, yField);
+
+					const xDomain = zx.domain();
+
+					const y1 = slope * xDomain[0] + intercept;
+					const y2 = slope * xDomain[1] + intercept;
 
 					d3.select(node)
-						/*
-						.attr("x1", zx(xExtent[0]))
+						.attr("x1", zx(xDomain[0]))
 						.attr("y1", y(y1))
-						.attr("x2", zx(xExtent[1]))
+						.attr("x2", zx(xDomain[1]))
 						.attr("y2", y(y2));
-						*/
-						// Handle Y only by updateYScaleIfNeeded
-						.attr("x1", zx(xExtent[0]))
-						.attr("x2", zx(xExtent[1]));
 				});
 			});
 
@@ -630,7 +763,17 @@ export default function ScatterTrend({
 			window.removeEventListener("resize", onResize);
 		};
 
-	}, [data, selectedArtist, showArtistPoints, showArtistLines]);
+	}, [
+		data,
+		selectedArtist,
+		showArtistPoints,
+		showArtistLines,
+		xField,
+		yField,
+		sizeField,
+		xLabel,
+		yLabel
+	]);
 
 	return <svg id="scatter-svg"></svg>;
 }

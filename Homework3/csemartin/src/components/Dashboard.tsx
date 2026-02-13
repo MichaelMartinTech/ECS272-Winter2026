@@ -24,6 +24,12 @@ export type Track = {
 	track_name: string;
 };
 
+type AxisOption =
+	| "artist_followers"
+	| "artist_popularity"
+	| "track_popularity"
+	| "release_year";
+
 /*
 function normalizeGenre(raw: string): string {
 	if (!raw) return "Other";
@@ -138,6 +144,20 @@ export default function Dashboard() {
 	const [showArtistPoints, setShowArtistPoints] = useState<boolean>(true);
 	const [showArtistLines, setShowArtistLines] = useState<boolean>(false);
 
+	// Axis selection state
+	const [xAxisField, setXAxisField] =
+		useState<AxisOption>("artist_popularity");
+
+	const [yAxisField, setYAxisField] =
+		useState<AxisOption>("track_popularity");
+
+	const [sizeField, setSizeField] =
+		useState<AxisOption>("artist_followers");
+
+	const [showSettings, setShowSettings] =
+		useState<boolean>(false);
+
+
 	// Load data ONCE
 	useEffect(() => {
 		//d3.csv("/data/track_data_final.csv").then(raw => {
@@ -227,11 +247,19 @@ export default function Dashboard() {
 				if (durationRaw > 0 && durationRaw < 1000) {
 					durationRaw = durationRaw * 60 * 1000;
 				}
+
+				let parsedYear = new Date(d.album_release_date ?? "").getFullYear();
+
+				if (!Number.isFinite(parsedYear) || parsedYear < 1900 || parsedYear > 2025) {
+					parsedYear = NaN;
+				}
+				
+
 				return {
 					track_popularity: +d.track_popularity!,
 					artist_popularity: +d.artist_popularity!,
 					artist_followers: +d.artist_followers!,
-					release_year: new Date(d.album_release_date!).getFullYear(),
+					release_year: parsedYear, //release_year: new Date(d.album_release_date!).getFullYear(),
 					//genre: normalizeGenre(primaryGenre),
 					//genre: classified,
 					danceability: +d.danceability!,
@@ -257,6 +285,55 @@ export default function Dashboard() {
 		return <div style={{ padding: "20px" }}>Loading data…</div>;
 	}
 
+	const axisOptions: AxisOption[] = [
+		"artist_followers",
+		"artist_popularity",
+		"track_popularity",
+		"release_year"
+	];
+
+	function formatAxisLabel(field: AxisOption) {
+		switch (field) {
+			case "artist_followers": return "Artist Followers";
+			case "artist_popularity": return "Artist Popularity";
+			case "track_popularity": return "Track Popularity";
+			case "release_year": return "Release Year";
+		}
+	}
+
+	function renderDropdown(
+		label: string,
+		value: AxisOption,
+		setter: (v: AxisOption) => void
+	) {
+		return (
+			<div style={{ marginBottom: "6px" }}>
+				<label>{label}</label>
+				<select
+					value={value}
+					onChange={(e) => {
+						const newVal = e.target.value as AxisOption;
+
+						// Enforce distinct axes
+						const chosen = [xAxisField, yAxisField, sizeField];
+						const duplicates = chosen.filter(v => v === newVal);
+
+						if (duplicates.length >= 1 && newVal !== value) return;
+
+						setter(newVal);
+					}}
+					style={{ marginLeft: "6px", fontSize: "11px" }}
+				>
+					{axisOptions.map(opt => (
+						<option key={opt} value={opt}>
+							{formatAxisLabel(opt)}
+						</option>
+					))}
+				</select>
+			</div>
+		);
+	}
+
 	const uniqueArtists = Array.from(
 		new Set(data.map(d => d.artist_name))
 	).sort();
@@ -277,11 +354,17 @@ export default function Dashboard() {
 					<strong>(Top)</strong> Stream graph — year-by-year genre family composition.
 					<em> Area thickness</em> encodes relative genre prevalence within each year (wiggle-offset for readability).
 				</span>
+				
 				<span>
-					<br></br>
-					<strong>(Bottom-left)</strong> Scatter + trend lines — association between artist popularity and track popularity.
-					<em> Point size</em> = artist followers; <em>color</em> = genre family; <em>lines</em> = per-genre least-squares fit.
+					<br />
+					<strong>(Bottom-left)</strong> Scatter + trend lines — association between{" "}
+					<strong>{formatAxisLabel(xAxisField).toLowerCase()}</strong> and{" "}
+					<strong>{formatAxisLabel(yAxisField).toLowerCase()}</strong>.
+					<em> Point size</em> = {formatAxisLabel(sizeField).toLowerCase()};{" "}
+					<em>color</em> = genre family;{" "}
+					<em>lines</em> = per-genre least-squares fit.
 				</span>
+
 				<span>
 					<br></br>
 					<strong>(Bottom-right)</strong> Bar chart — baseline track popularity by genre family.
@@ -325,7 +408,56 @@ export default function Dashboard() {
 
 				<div className="bottom-row">
 					<div className="panel">
-						<h3>Scatter Plot: Track Popularity vs Artist Popularity</h3>
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "space-between"
+							}}
+						>
+							<h3 style={{ margin: 0 }}>
+								Scatter Plot: {formatAxisLabel(yAxisField)} vs {formatAxisLabel(xAxisField)}
+							</h3>
+
+							<div style={{ position: "relative" }}>
+								<button
+									onClick={() => setShowSettings(s => !s)}
+									style={{
+										border: "none",
+										background: "transparent",
+										cursor: "pointer",
+										fontSize: "16px",
+										padding: "2px 4px"
+									}}
+									title="Axis Settings"
+								>
+									🔍
+								</button>
+
+								{showSettings && (
+									<div
+										style={{
+											position: "absolute",
+											top: "100%",
+											right: 0,
+											marginTop: "6px",
+											background: "white",
+											border: "1px solid #ccc",
+											padding: "10px",
+											fontSize: "11px",
+											boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+											zIndex: 50
+										}}
+									>
+										{renderDropdown("X Axis", xAxisField, setXAxisField)}
+										{renderDropdown("Y Axis", yAxisField, setYAxisField)}
+										{renderDropdown("Point Size", sizeField, setSizeField)}
+									</div>
+								)}
+							</div>
+						</div>
+
+
 						<div
 							style={{
 								fontSize: "11px",
@@ -397,18 +529,23 @@ export default function Dashboard() {
 								Show Genre Lines
 							</label>
 						</div>
-
+	
 							{/* Position encoding for quantitative comparison;
 								(color used for categorical genre separation) */}
-							<ScatterTrend 
-								data={data}
-								selectedArtist={selectedArtist}
-								showArtistPoints={showArtistPoints}
-								showArtistLines={showArtistLines}
-							/>
+								<ScatterTrend
+									data={data}
+									selectedArtist={selectedArtist}
+									showArtistPoints={showArtistPoints}
+									showArtistLines={showArtistLines}
+									xField={xAxisField}
+									yField={yAxisField}
+									sizeField={sizeField}
+									xLabel={formatAxisLabel(xAxisField)}
+									yLabel={formatAxisLabel(yAxisField)}
+								/>
 						</div>
 
-					<div className="panel">
+					<div className="panel" style={{ position: "relative" }}>
 						<h3>
 							{linkBarToStream && visibleYearRange
 								? `Mean Track Popularity by Genre (${visibleYearRange[0]}–${visibleYearRange[1]})`
