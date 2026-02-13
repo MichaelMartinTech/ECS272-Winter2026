@@ -301,6 +301,14 @@ export default function Dashboard() {
 		}
 	}
 
+	function formatSizeInline(field: AxisOption) {
+		return (
+			<>
+				<strong>{formatAxisLabel(field)}</strong>
+			</>
+		);
+	}
+
 	function renderDropdown(
 		label: string,
 		value: AxisOption,
@@ -468,11 +476,12 @@ export default function Dashboard() {
 							}}
 						>
 							<div>
-								<strong>Points:</strong> Individual tracks (size scaled by artist followers).
+								<strong>Points:</strong> Individual tracks.
 							</div>
 							<div>
 								<strong>Lines:</strong> Per-genre linear least-squares fit.
 							</div>
+
 						</div>
 						{/* Position encoding for quantitative comparison;
 							(color used for categorical genre separation) */}

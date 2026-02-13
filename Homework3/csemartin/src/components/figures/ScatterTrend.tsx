@@ -88,6 +88,28 @@ function invertColor(hex: string): string {
 	*/
 }
 
+function formatSizeLabel(field: keyof Track) {
+    switch (field) {
+        case "artist_followers": return "Followers";
+        case "artist_popularity": return "Artist Popularity";
+        case "track_popularity": return "Track Popularity";
+        case "release_year": return "Release Year";
+        default: return "";
+    }
+}
+
+function formatSizeValue(v: number, field: keyof Track) {
+	if (!Number.isFinite(v)) return "N/A";
+
+	if (field === "release_year") return String(Math.round(v));
+
+	if (field === "artist_popularity" || field === "track_popularity")
+		return String(Math.round(v));
+
+	return Math.round(v).toLocaleString();
+}
+
+
 export default function ScatterTrend({
 	data,
 	selectedArtist,
@@ -556,6 +578,71 @@ export default function ScatterTrend({
 				}
 			}
 
+			// POINT SIZE LEGEND (TOP RIGHT) ---------------------------
+			const sizeLegend = g.append("g")
+				.attr("transform", `translate(${width - 260}, -20)`);
+
+			const minVal = sizeExtent[0] ?? 1;
+			const maxVal = sizeExtent[1] ?? 1;
+
+			const minLabel = formatSizeValue(minVal, sizeField);
+			const maxLabel = formatSizeValue(maxVal, sizeField);
+
+			// Left min value
+			sizeLegend.append("text")
+				.attr("x", 0)
+				.attr("y", 4)
+				.attr("font-size", "11px")
+				.attr("text-anchor", "start")
+				.text(minLabel);
+
+			// Small circle
+			sizeLegend.append("circle")
+				.attr("cx", 50)
+				.attr("cy", 0)
+				.attr("r", r(minVal))
+				.attr("fill", "white")
+				.attr("stroke", "black");
+
+			// Arrow line
+			sizeLegend.append("line")
+				.attr("x1", 70)
+				.attr("y1", 0)
+				.attr("x2", 130)
+				.attr("y2", 0)
+				.attr("stroke", "black")
+				.attr("stroke-width", 1.5);
+
+			// Arrow head
+			sizeLegend.append("path")
+				.attr("d", "M 130 -4 L 138 0 L 130 4")
+				.attr("fill", "black");
+
+			// Big circle
+			sizeLegend.append("circle")
+				.attr("cx", 160)
+				.attr("cy", 0)
+				.attr("r", r(maxVal))
+				.attr("fill", "white")
+				.attr("stroke", "black");
+
+			// Max value text
+			sizeLegend.append("text")
+				.attr("x", 185)
+				.attr("y", 4)
+				.attr("font-size", "11px")
+				.attr("text-anchor", "start")
+				.text(maxLabel);
+/*
+			// Variable label (bold)
+			sizeLegend.append("text")
+				.attr("x", 235)
+				.attr("y", 4)
+				.attr("font-size", "11px")
+				.attr("font-weight", "bold")
+				.text(xLabel === yLabel ? formatSizeValue(maxVal, sizeField) : formatSizeLabel(sizeField));
+*/
+			// ---------------------------------------
 			// Legend
 			const legend = g.append("g")
 				.attr("transform", `translate(${width + 10}, 0)`);
