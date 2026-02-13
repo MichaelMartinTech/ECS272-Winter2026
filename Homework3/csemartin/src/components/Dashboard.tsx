@@ -134,6 +134,8 @@ export default function Dashboard() {
 		useState<boolean>(true);
 
 	const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+	const [showArtistPoints, setShowArtistPoints] = useState<boolean>(true);
+	const [showArtistLines, setShowArtistLines] = useState<boolean>(true);
 
 	// Load data ONCE
 	useEffect(() => {
@@ -319,41 +321,66 @@ export default function Dashboard() {
 						{/* Position encoding for quantitative comparison;
 							(color used for categorical genre separation) */}
 						<div style={{
-								display: "flex",
-								justifyContent: "center",
-								marginBottom: "8px",
-								position: "relative"
-							}}>
-								<select
-									value={selectedArtist ?? ""}
-									onChange={(e) =>
-										setSelectedArtist(
-											e.target.value === "" ? null : e.target.value
-										)
-									}
-									style={{
-										padding: "4px 8px",
-										fontSize: "11px",
-										maxWidth: "180px",
-										overflow: "hidden",
-										textOverflow: "ellipsis",
-										whiteSpace: "nowrap"
-									}}
-								>
-									<option value="">Select Artist (Optional)</option>
-									{uniqueArtists.map(name => (
-										<option key={name} value={name}>
-											{name}
-										</option>
-									))}
-								</select>
-							</div>
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: "12px",
+							marginBottom: "8px",
+							flexWrap: "wrap"
+						}}>
+							<label style={{ fontSize: "12px" }}>
+								<strong>Select Artist:</strong>
+							</label>
+
+							<select
+								value={selectedArtist ?? ""}
+								onChange={(e) =>
+									setSelectedArtist(
+										e.target.value === "" ? null : e.target.value
+									)
+								}
+								style={{
+									padding: "4px 8px",
+									fontSize: "11px",
+									maxWidth: "180px"
+								}}
+							>
+								<option value="">None</option>
+								{uniqueArtists.map(name => (
+									<option key={name} value={name}>
+										{name}
+									</option>
+								))}
+							</select>
+
+							<label style={{ fontSize: "11px" }}>
+								<input
+									type="checkbox"
+									checked={showArtistPoints}
+									onChange={e => setShowArtistPoints(e.target.checked)}
+									style={{ marginRight: "4px" }}
+								/>
+								Show Artist Points
+							</label>
+
+							<label style={{ fontSize: "11px" }}>
+								<input
+									type="checkbox"
+									checked={showArtistLines}
+									onChange={e => setShowArtistLines(e.target.checked)}
+									style={{ marginRight: "4px" }}
+								/>
+								Show Genre Lines
+							</label>
+						</div>
 
 							{/* Position encoding for quantitative comparison;
 								(color used for categorical genre separation) */}
 							<ScatterTrend 
 								data={data}
 								selectedArtist={selectedArtist}
+								showArtistPoints={showArtistPoints}
+								showArtistLines={showArtistLines}
 							/>
 						</div>
 

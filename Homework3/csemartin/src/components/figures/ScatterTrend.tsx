@@ -24,11 +24,16 @@ function linearRegression(points: Track[]) {
 
 export default function ScatterTrend({
 	data,
-	selectedArtist
+	selectedArtist,
+	showArtistPoints,
+	showArtistLines
 }: {
 	data: Track[];
 	selectedArtist: string | null;
+	showArtistPoints: boolean;
+	showArtistLines: boolean;
 }) {
+
 
 
 	// SCATTER PLOT + TRENDLINES
@@ -202,11 +207,16 @@ export default function ScatterTrend({
 				//.attr("opacity", 0.28);
 				.attr("fill", d => genreColorScale(d.genre))
 
-				.attr("opacity", d =>
-					selectedArtist
-						? d.artist_name.trim().toLowerCase() === normalizedSelected ? 1 : 0.12
-						: 0.28
-				)
+				.attr("opacity", d => {
+					if (!showArtistPoints) return 0;
+
+					if (selectedArtist) {
+						return d.artist_name.trim().toLowerCase() === normalizedSelected ? 1 : 0.12;
+					}
+
+					return 0.28;
+				})
+
 				.attr("stroke", d =>
 					selectedArtist &&
 					d.artist_name.trim().toLowerCase() === normalizedSelected
@@ -265,7 +275,7 @@ export default function ScatterTrend({
 					.attr("y2", y(y2))
 					.attr("stroke", genreColorScale(genre))
 					.attr("stroke-width", 3.5)
-					.attr("opacity", 1);
+					.attr("opacity", showArtistLines ? 1 : 0);
 
 				//lines.push(line.node() as SVGLineElement);
 				// Object lines fix:
@@ -400,7 +410,7 @@ export default function ScatterTrend({
 			window.removeEventListener("resize", onResize);
 		};
 
-	}, [data, selectedArtist]);
+	}, [data, selectedArtist, showArtistPoints, showArtistLines]);
 
 	return <svg id="scatter-svg"></svg>;
 }
