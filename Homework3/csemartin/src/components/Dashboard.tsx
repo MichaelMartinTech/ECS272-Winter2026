@@ -16,7 +16,7 @@ export type Track = {
 	valence: number;
 	tempo: number;
 	duration_ms: number;
-	explicit: number;
+	explicit: boolean;
 	// Added
 	genre: string;
 	rawGenres?: string;
@@ -136,7 +136,7 @@ export default function Dashboard() {
 
 	const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
 	const [showArtistPoints, setShowArtistPoints] = useState<boolean>(true);
-	const [showArtistLines, setShowArtistLines] = useState<boolean>(true);
+	const [showArtistLines, setShowArtistLines] = useState<boolean>(false);
 
 	// Load data ONCE
 	useEffect(() => {
@@ -222,6 +222,11 @@ export default function Dashboard() {
 					}
 				}
 
+				let durationRaw = +d.track_duration_ms!;
+
+				if (durationRaw > 0 && durationRaw < 1000) {
+					durationRaw = durationRaw * 60 * 1000;
+				}
 				return {
 					track_popularity: +d.track_popularity!,
 					artist_popularity: +d.artist_popularity!,
@@ -233,8 +238,9 @@ export default function Dashboard() {
 					energy: +d.energy!,
 					valence: +d.valence!,
 					tempo: +d.tempo!,
-					duration_ms: +d.duration_ms!,
-					explicit: +d.explicit!,
+					//duration_ms: +d.duration_ms!,
+					duration_ms: durationRaw,
+					explicit: String(d.explicit).toLowerCase() === "true",
 					genre: classified,
 					rawGenres: rawGenre,
 					artist_name: d.artist_name?.trim() || "",
@@ -320,6 +326,22 @@ export default function Dashboard() {
 				<div className="bottom-row">
 					<div className="panel">
 						<h3>Scatter Plot: Track Popularity vs Artist Popularity</h3>
+						<div
+							style={{
+								fontSize: "11px",
+								color: "#444",
+								marginBottom: "8px",
+								lineHeight: "1.4",
+								textAlign: "center"
+							}}
+						>
+							<div>
+								<strong>Points:</strong> Individual tracks (size scaled by artist followers).
+							</div>
+							<div>
+								<strong>Lines:</strong> Per-genre linear least-squares fit.
+							</div>
+						</div>
 						{/* Position encoding for quantitative comparison;
 							(color used for categorical genre separation) */}
 						<div style={{

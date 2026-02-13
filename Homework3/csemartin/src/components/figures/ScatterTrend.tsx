@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import { GENRES, genreColorScale } from "../../colors";
 import type { Track } from "../Dashboard";
 
+// Linear regression utility (returns slope and intercept)
 function linearRegression(points: Track[]) {
 	const n = points.length;
 	const meanX = d3.mean(points, d => d.artist_popularity)!;
@@ -22,6 +23,7 @@ function linearRegression(points: Track[]) {
 	return { slope, intercept };
 }
 
+// Utility to format duration from ms to MM:SS (or HH:MM:SS if long enough)
 function formatDuration(ms: number): string {
     if (!ms || !Number.isFinite(ms)) return "N/A";
 
@@ -39,6 +41,32 @@ function formatDuration(ms: number): string {
     }
 
     return `${mm}:${ss}`;
+}
+
+// Utility to invert a hex color
+function invertColor(hex: string): string {
+   return "black";
+	/*
+	const c = d3.color(hex);
+	
+    if (!c) return "black";
+
+    const rgb = c.rgb();
+    // Perceptual luminance
+    const luminance =
+        0.299 * rgb.r +
+        0.587 * rgb.g +
+        0.114 * rgb.b;
+
+    // If bright color --> use black stroke
+    // If dark color --> use white stroke
+    //return luminance > 140 ? "black" : "white";
+	if (luminance > 140) {
+		return "black";
+	} else {
+		return "white";
+	}
+	*/
 }
 
 export default function ScatterTrend({
@@ -61,6 +89,10 @@ export default function ScatterTrend({
 		const svg = d3.select("#scatter-svg");
 
 		const draw = () => {
+			// To mirror streamgraph's pattern
+			const genreVisibility = new Map<string, boolean>();
+			GENRES.forEach(g => genreVisibility.set(g, true));
+
 			const autoYScaling = true; // toggle magnitude for UI
 
 			svg.selectAll("*").remove();
@@ -89,6 +121,10 @@ export default function ScatterTrend({
 			// Plot layer (clipped to axes bounds)
 			const plotLayer = g.append("g")
 				.attr("clip-path", "url(#scatter-clip)");
+
+			const hoverLayer = g.append("g")
+				.attr("clip-path", "url(#scatter-clip)")
+				.style("pointer-events", "none");
 
 			const tooltip = d3.select("body")
 				.selectAll(".scatter-tooltip")
@@ -231,11 +267,12 @@ export default function ScatterTrend({
 				[ Box showing different points in the one spot ]
 			*/
 			//g.selectAll("circle")
-
-			const points = plotLayer.selectAll("circle") //g.selectAll("circle")
+			const points = plotLayer
+				.selectAll<SVGCircleElement, Track>("circle")
 				.data(data)
 				.enter()
 				.append("circle")
+				
 				.attr("cx", d => x(d.artist_popularity))
 				.attr("cy", d => y(d.track_popularity))
 				.attr("r", d => r(Math.max(1, d.artist_followers)))
@@ -243,30 +280,49 @@ export default function ScatterTrend({
 				//.attr("opacity", 0.28);
 				.attr("fill", d => genreColorScale(d.genre))
 
+				.attr("pointer-events", d => {
+
+					const isSelected =
+						normalizedSelected !== null &&
+						d.artist_name.trim().toLowerCase() === normalizedSelected;
+
+					if (!showArtistPoints && !selectedArtist) return "none";
+
+					if (!showArtistPoints && normalizedSelected !== null && !isSelected)
+						return "none";
+
+					if (!genreVisibility.get(d.genre)) return "none";
+
+					return "auto";
+				})
+
+
+				// Opacity logic:
+				// - If no artist selected: all points visible at base opacity
+				// - If artist selected & showArtistPoints: selected artist fully opaque, others very faint
+				// - If artist selected & !showArtistPoints: only selected artist visible, others hidden
 				.attr("opacity", d => {
+					const isSelected =
+						normalizedSelected !== null &&
+						d.artist_name.trim().toLowerCase() === normalizedSelected;
 
-				const isSelected =
-					normalizedSelected !== null &&
-					d.artist_name.trim().toLowerCase() === normalizedSelected;
-
-					// Always show selected artist
 					if (isSelected) return 1;
 
-					// If points disabled, hide everything else
+					if (!genreVisibility.get(d.genre)) return 0;
+
 					if (!showArtistPoints) return 0;
 
-					// Otherwise normal behavior
 					return selectedArtist ? 0.12 : 0.28;
 				})
 
 				.attr("stroke", d =>
-					selectedArtist &&
+					normalizedSelected !== null &&
 					d.artist_name.trim().toLowerCase() === normalizedSelected
 						? "black"
 						: "none"
 				)
 				.attr("stroke-width", d =>
-					selectedArtist &&
+					normalizedSelected !== null &&
 					d.artist_name.trim().toLowerCase() === normalizedSelected
 						? 2
 						: 0
@@ -275,14 +331,33 @@ export default function ScatterTrend({
 				.on("mousemove", function (event, d) {
 
 					const isSelected =
-						selectedArtist &&
+						normalizedSelected !== null &&
 						d.artist_name.trim().toLowerCase() === normalizedSelected;
 
-					// Only show tooltip for selected artist
-					if ((!isSelected && !showArtistPoints) || (!isSelected && selectedArtist)) {
+					// Respect visibility rules FIRST
+					if (!showArtistPoints && !selectedArtist) {
 						tooltip.style("display", "none");
+						hoverLayer.selectAll("*").remove();
 						return;
 					}
+
+					if (!showArtistPoints && normalizedSelected !== null && !isSelected) {
+						tooltip.style("display", "none");
+						hoverLayer.selectAll("*").remove();
+						return;
+					}
+
+					hoverLayer.selectAll("*").remove();
+
+					hoverLayer.append("circle")
+						.attr("cx", x(d.artist_popularity))
+						.attr("cy", y(d.track_popularity))
+						.attr("r", r(Math.max(1, d.artist_followers)) + 2)
+						.attr("fill", "none")
+						.attr("stroke", isSelected ? "gold" : invertColor(genreColorScale(d.genre)))
+						.attr("stroke-width", 4)
+						.attr("stroke-opacity", 1)
+						.attr("vector-effect", "non-scaling-stroke");
 
 					const subgenres = d.rawGenres
 						? d.rawGenres.split(",").map(s => s.trim()).filter(Boolean)
@@ -293,9 +368,7 @@ export default function ScatterTrend({
 						.style("left", event.pageX + 12 + "px")
 						.style("top", event.pageY - 28 + "px")
 						.html(`
-							<div style="margin-bottom:4px;">
-								<strong>Track:</strong> ${d.track_name}
-							</div>
+							<div><strong>Track:</strong> ${d.track_name}</div>
 							<div><strong>Artist:</strong> ${d.artist_name}</div>
 							<div><strong>Duration:</strong> ${formatDuration(d.duration_ms)}</div>
 							<div><strong>Genre Family:</strong> ${d.genre}</div>
@@ -306,10 +379,18 @@ export default function ScatterTrend({
 							<div><strong>Artist Popularity:</strong> ${d.artist_popularity}</div>
 							<div><strong>Followers:</strong> ${d.artist_followers.toLocaleString()}</div>
 						`);
-				})
-				.on("mouseleave", () => {
+				}) .on("mouseleave", function () {
+					hoverLayer.selectAll("*").remove();
 					tooltip.style("display", "none");
 				});
+
+			if (normalizedSelected !== null) {
+				points
+					.filter(d =>
+						d.artist_name.trim().toLowerCase() === normalizedSelected
+					)
+					.raise();
+			}
 
 			// Per-genre linear trend regression lines (visual guides)
 			/*
@@ -348,14 +429,17 @@ export default function ScatterTrend({
 				const xExtent = d3.extent(subset, d => d.artist_popularity) as [number, number];
 				const y1 = slope * xExtent[0] + intercept;
 				const y2 = slope * xExtent[1] + intercept;
-				const line = plotLayer.append("line") //g.append("line")
+				const line = plotLayer.append("line")
 					.attr("x1", x(xExtent[0]))
 					.attr("y1", y(y1))
 					.attr("x2", x(xExtent[1]))
 					.attr("y2", y(y2))
 					.attr("stroke", genreColorScale(genre))
 					.attr("stroke-width", 3.5)
-					.attr("opacity", showArtistLines ? 1 : 0);
+					.attr("pointer-events", "none") // Stop mouse events from interfering with points
+					//.attr("opacity", showArtistLines ? 1 : 0);
+					.attr("opacity", showArtistLines && genreVisibility.get(genre) ? 1 : 0); // Lines also respect genre visibility toggling
+					
 
 				//lines.push(line.node() as SVGLineElement);
 				// Object lines fix:
@@ -373,19 +457,100 @@ export default function ScatterTrend({
 
 			GENRES.forEach((genre, i) => {
 				const row = legend.append("g")
-					.attr("transform", `translate(0, ${i * 16})`);
+					.attr("transform", `translate(0, ${i * 16})`)
+					.style("cursor", "pointer");
 
-				row.append("rect")
+				const rect = row.append("rect")
 					.attr("width", 10)
 					.attr("height", 10)
 					.attr("fill", genreColorScale(genre));
 
-				row.append("text")
+				const text = row.append("text")
 					.attr("x", 14)
 					.attr("y", 9)
 					.attr("font-size", "10px")
 					.text(genre);
+
+				// Hover behavior
+				row.on("mouseenter", function () {
+
+					text.attr("font-weight", "bold");
+
+					points.transition()
+						.duration(120)
+						.attr("opacity", (p: Track) =>
+							p.genre === genre ? 1 : 0.1
+						);
+
+					lines.forEach(({ genre: g, node }) => {
+						d3.select(node)
+							.attr("opacity", g === genre ? 1 : 0);
+					});
+				});
+
+				row.on("mouseleave", function () {
+
+					text.attr("font-weight", "normal");
+
+					points.transition()
+						.duration(120)
+						.attr("opacity", (p: Track) => {
+							const isSelected =
+								normalizedSelected !== null &&
+								p.artist_name.trim().toLowerCase() === normalizedSelected;
+
+							if (isSelected) return 1;
+							if (!genreVisibility.get(p.genre)) return 0;
+							if (!showArtistPoints) return 0;
+							return selectedArtist ? 0.12 : 0.28;
+						});
+
+					lines.forEach(({ genre: g, node }) => {
+						d3.select(node)
+							.attr("opacity",
+								showArtistLines && genreVisibility.get(g) ? 1 : 0
+							);
+					});
+				});
+
+
+				// Click toggle
+				row.on("click", () => {
+					const current = genreVisibility.get(genre)!;
+					const newState = !current;
+
+					genreVisibility.set(genre, newState);
+
+					row.transition()
+						.duration(150)
+						.style("opacity", newState ? 1 : 0.35);
+
+					text.style("text-decoration",
+						newState ? "none" : "line-through"
+					);
+
+					// Update points
+					points.attr("opacity", d => {
+						const isSelected =
+							normalizedSelected !== null &&
+							d.artist_name.trim().toLowerCase() === normalizedSelected;
+
+						if (isSelected) return 1;
+						if (!genreVisibility.get(d.genre)) return 0;
+						if (!showArtistPoints) return 0;
+						return selectedArtist ? 0.12 : 0.28;
+					});
+
+					// Update lines
+					lines.forEach(({ genre: g, node }) => {
+						d3.select(node)
+							.attr("opacity",
+								showArtistLines && genreVisibility.get(g) ? 1 : 0
+							);
+					});
+				});
 			});
+
 
 			if (selectedArtist) {
 				const row = legend.append("g")
@@ -406,32 +571,7 @@ export default function ScatterTrend({
 					.text(`${selectedArtist} (Artist)`);
 			}
 
-			// Explanatory annotation (top-left, inside plot)
-			const note = g.append("g")
-				.attr("transform", "translate(20, 10)");
 
-			note.append("rect")
-				.attr("x", 0)
-				.attr("y", 0)
-				.attr("width", 270)
-				.attr("height", 52)
-				.attr("fill", "#f8f8f8")
-				.attr("stroke", "#ccc")
-				.attr("rx", 4)
-				.attr("opacity", 0.9);
-
-			note.append("text")
-				.attr("x", 8)
-				.attr("y", 18)
-				.attr("font-size", "10px")
-				.text("Points: individual tracks (size scaled by artist followers)");
-
-			note.append("text")
-				.attr("x", 8)
-				.attr("y", 34)
-				.attr("font-size", "10px")
-				.text("Lines: per-genre linear least-squares fit");
-			
 			const zoom = d3.zoom<SVGSVGElement, unknown>()
 			.scaleExtent([1, 8])
 			.translateExtent([[0, 0], [width, height]])
@@ -476,7 +616,6 @@ export default function ScatterTrend({
 						.attr("x2", zx(xExtent[1]));
 				});
 			});
-
 
 			svg.call(zoom as any);
 		};
