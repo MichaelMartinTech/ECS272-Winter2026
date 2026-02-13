@@ -20,6 +20,7 @@ export type Track = {
 	// Added
 	genre: string;
 	rawGenres?: string;
+	artist_name: string;
 };
 
 /*
@@ -132,6 +133,8 @@ export default function Dashboard() {
 	const [linkBarToStream, setLinkBarToStream] =
 		useState<boolean>(true);
 
+	const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+
 	// Load data ONCE
 	useEffect(() => {
 		//d3.csv("/data/track_data_final.csv").then(raw => {
@@ -230,7 +233,8 @@ export default function Dashboard() {
 					duration_ms: +d.duration_ms!,
 					explicit: +d.explicit!,
 					genre: classified,
-					rawGenres: rawGenre
+					rawGenres: rawGenre,
+					artist_name: d.artist_name?.trim() || ""
 				};
 			});
 
@@ -242,6 +246,10 @@ export default function Dashboard() {
 	if (!data) {
 		return <div style={{ padding: "20px" }}>Loading data…</div>;
 	}
+
+	const uniqueArtists = Array.from(
+		new Set(data.map(d => d.artist_name))
+	).sort();
 
 	// /* Note: Add Toggle for these - Button that opens [About] */
 	return (
@@ -310,8 +318,44 @@ export default function Dashboard() {
 						<h3>Scatter Plot: Track Popularity vs Artist Popularity</h3>
 						{/* Position encoding for quantitative comparison;
 							(color used for categorical genre separation) */}
-						<ScatterTrend data={data} />
-					</div>
+						<div style={{
+								display: "flex",
+								justifyContent: "center",
+								marginBottom: "8px",
+								position: "relative"
+							}}>
+								<select
+									value={selectedArtist ?? ""}
+									onChange={(e) =>
+										setSelectedArtist(
+											e.target.value === "" ? null : e.target.value
+										)
+									}
+									style={{
+										padding: "4px 8px",
+										fontSize: "11px",
+										maxWidth: "180px",
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap"
+									}}
+								>
+									<option value="">Select Artist (Optional)</option>
+									{uniqueArtists.map(name => (
+										<option key={name} value={name}>
+											{name}
+										</option>
+									))}
+								</select>
+							</div>
+
+							{/* Position encoding for quantitative comparison;
+								(color used for categorical genre separation) */}
+							<ScatterTrend 
+								data={data}
+								selectedArtist={selectedArtist}
+							/>
+						</div>
 
 					<div className="panel">
 						<h3>

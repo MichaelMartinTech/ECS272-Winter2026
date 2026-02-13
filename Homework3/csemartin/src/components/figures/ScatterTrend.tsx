@@ -22,7 +22,14 @@ function linearRegression(points: Track[]) {
 	return { slope, intercept };
 }
 
-export default function ScatterTrend({ data }: { data: Track[] }) {
+export default function ScatterTrend({
+	data,
+	selectedArtist
+}: {
+	data: Track[];
+	selectedArtist: string | null;
+}) {
+
 
 	// SCATTER PLOT + TRENDLINES
 	useEffect(() => {
@@ -62,6 +69,14 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 			// Scales
 			const x = d3.scaleLinear().domain([0, 100]).range([0, width]);
 			const y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+
+			const normalizedSelected = selectedArtist ? selectedArtist.trim().toLowerCase(): null;
+
+			console.log(
+				data.filter(d =>
+					d.artist_name.trim().toLowerCase() === normalizedSelected
+				)
+			);
 
 			// Radius scale (followers -> point size)
 			const followerVals = data
@@ -175,6 +190,7 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 				[ Box showing different points in the one spot ]
 			*/
 			//g.selectAll("circle")
+
 			const points = plotLayer.selectAll("circle") //g.selectAll("circle")
 				.data(data)
 				.enter()
@@ -182,8 +198,28 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 				.attr("cx", d => x(d.artist_popularity))
 				.attr("cy", d => y(d.track_popularity))
 				.attr("r", d => r(Math.max(1, d.artist_followers)))
+				//.attr("fill", d => genreColorScale(d.genre))
+				//.attr("opacity", 0.28);
 				.attr("fill", d => genreColorScale(d.genre))
-				.attr("opacity", 0.28);
+
+				.attr("opacity", d =>
+					selectedArtist
+						? d.artist_name.trim().toLowerCase() === normalizedSelected ? 1 : 0.12
+						: 0.28
+				)
+				.attr("stroke", d =>
+					selectedArtist &&
+					d.artist_name.trim().toLowerCase() === normalizedSelected
+						? "black"
+						: "none"
+				)
+				.attr("stroke-width", d =>
+					selectedArtist &&
+					d.artist_name.trim().toLowerCase() === normalizedSelected
+						? 2
+						: 0
+				);
+
 
 			// Per-genre linear trend regression lines (visual guides)
 			/*
@@ -260,6 +296,25 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 					.attr("font-size", "10px")
 					.text(genre);
 			});
+
+			if (selectedArtist) {
+				const row = legend.append("g")
+					.attr("transform", `translate(0, ${GENRES.length * 16 + 10})`);
+
+				row.append("circle")
+					.attr("cx", 5)
+					.attr("cy", 5)
+					.attr("r", 5)
+					.attr("fill", "white")
+					.attr("stroke", "black")
+					.attr("stroke-width", 2);
+
+				row.append("text")
+					.attr("x", 14)
+					.attr("y", 9)
+					.attr("font-size", "10px")
+					.text(`${selectedArtist} (Artist)`);
+			}
 
 			// Explanatory annotation (top-left, inside plot)
 			const note = g.append("g")
@@ -345,7 +400,7 @@ export default function ScatterTrend({ data }: { data: Track[] }) {
 			window.removeEventListener("resize", onResize);
 		};
 
-	}, [data]);
+	}, [data, selectedArtist]);
 
 	return <svg id="scatter-svg"></svg>;
 }
